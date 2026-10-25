@@ -7,49 +7,70 @@
     curve: { x: 't cos t', y: 't sin t', z: 'sin 3t', t0: '2', t1: '4pi', n: 300 },
     twist: 0,
     out: { scale: 1, unit: 'mm', labels: false },
+    joint: FTM.joints.defaults(),
+    splits: {},
+    layout: {},
   });
   let state = DEFAULT();
   try { const a = localStorage.getItem('ftm.auto'); if (a) state = Object.assign(DEFAULT(), JSON.parse(a)); } catch (e) {}
 
   const view3d = FTM.View3D($('c3d'));
-  const flat = FTM.FlatView($('cflat'));
+  let strips = [];
+  const flat = FTM.FlatView($('cflat'), {
+    split(pc, c) { (state.splits[pc.edge] = state.splits[pc.edge] || []).push(c); state.layout = pruneLayout(); scheduleB(); },
+    join(edge, c) { state.splits[edge] = (state.splits[edge] || []).filter(x => x !== c); scheduleB(); },
+    placed(pc) { state.layout[pc.key] = Object.assign({}, pc.xf); autosave(); },
+  });
+  flat.setMode('move');
+  function pruneLayout() { return state.layout; }
   const editor = FTM.PolyEditor($('cpoly'), state, () => { schedule(); });
+  const jedit = FTM.JointEditor($('cjoint'), state, () => { scheduleB(); jedit.draw(); });
   editor.setCoordEl($('coords'));
   let pending = false, refit = true, model = null, pieces = [];
 
-  function schedule() { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; recompute(); }); } }
+  let dirtyA = true, polyNote = '', nSamples = 0;
+  function schedule() { dirtyA = true; scheduleB(); }
+  function scheduleB() { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; recompute(); }); } }
+  function autosave() { try { localStorage.setItem('ftm.auto', JSON.stringify(snapshot())); } catch (e) {} }
 
   function setStatus(msg, bad) { const el = $('status'); el.textContent = msg; el.className = bad ? 'bad' : ''; }
 
-  function recompute() {
-    state.polygon = state.polygon; // editor may have replaced it (undo)
+  function stageA() { // curve + polygon -> 3D model and unfolded strips
     const c = state.curve;
     ['x', 'y', 'z', 't0', 't1'].forEach(k => $('in_' + k).classList.remove('err'));
-    let fn = {};
+    const fn = {};
+    for (const k of ['x', 'y', 'z', 't0', 't1']) {
+      try { fn[k] = FTM.compileExpr(c[k]); } catch (e) { $('in_' + k).classList.add('err'); throw new Error(`${k}: ${e.message}`); }
+    }
+    const t0 = fn.t0(0), t1 = fn.t1(0), n = Math.max(2, Math.min(3000, Math.round(+c.n) || 300));
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t0 === t1) { $('in_t1').classList.add('err'); throw new Error('bad t range'); }
+    const cur = FTM.sampleCurve(fn.x, fn.y, fn.z, t0, t1, n);
+    const fr = FTM.bishopFrame(cur.P, cur.T, (+state.twist || 0) * Math.PI / 180);
+    const closed = state.polygon.closed;
+    const drawn = state.polygon.pts, poly = closed ? FTM.resolvePolygon(drawn) : drawn;
+    const Q = FTM.sweep(poly, cur.P, fr.U, fr.V);
+    model = { P: cur.P, T: cur.T, U: fr.U, V: fr.V, Q, closed };
+    strips = FTM.buildStrips(poly, closed, Q, fr.U, fr.V);
+    nSamples = n;
+    polyNote = poly !== drawn ? ` \u2014 self-intersecting polygon: using its ${poly.length}-vertex outline` : '';
+  }
+
+  function recompute() {
     try {
-      for (const k of ['x', 'y', 'z', 't0', 't1']) {
-        try { fn[k] = FTM.compileExpr(c[k]); } catch (e) { $('in_' + k).classList.add('err'); throw new Error(`${k}: ${e.message}`); }
-      }
-      const t0 = fn.t0(0), t1 = fn.t1(0), n = Math.max(2, Math.min(3000, Math.round(+c.n) || 300));
-      if (!Number.isFinite(t0) || !Number.isFinite(t1) || t0 === t1) { $('in_t1').classList.add('err'); throw new Error('bad t range'); }
-      const cur = FTM.sampleCurve(fn.x, fn.y, fn.z, t0, t1, n);
-      const fr = FTM.bishopFrame(cur.P, cur.T, (+state.twist || 0) * Math.PI / 180);
-      const closed = state.polygon.closed;
-      const drawn = state.polygon.pts, poly = closed ? FTM.resolvePolygon(drawn) : drawn;
-      const Q = FTM.sweep(poly, cur.P, fr.U, fr.V);
-      model = { P: cur.P, T: cur.T, U: fr.U, V: fr.V, Q, closed };
-      pieces = FTM.buildPieces(poly, closed, Q, fr.U, fr.V);
-      pieces = FTM.slots.apply(pieces, { frames: fr, curve: cur }) || pieces;
+      if (dirtyA) { dirtyA = false; stageA(); view3d.setModel(model); }
+      const jt = state.joint;
+      jt.w = Math.max(0.01, +jt.w || 1); jt.margin = Math.max(0, +jt.margin || 0);
+      pieces = FTM.joints.makePieces(strips, { splits: state.splits, joint: jt, layout: state.layout });
       const err = Math.max(0, ...pieces.map(p => p.flatErr));
-      setStatus(`${pieces.length} pieces, ${n} segments each; max unfolding error ${(err * 100).toPrecision(2)}%` + (poly !== drawn ? ` — self-intersecting polygon: using its ${poly.length}-vertex outline` : ''), false);
+      setStatus(`${pieces.length} pieces (${strips.length} edges), ${nSamples} segments; max unfolding error ${(err * 100).toPrecision(2)}%` + polyNote, false);
     } catch (e) {
-      model = null; pieces = [];
+      model = null; pieces = []; strips = []; dirtyA = true;
+      view3d.setModel(null);
       setStatus(e.message, true);
     }
-    view3d.setModel(model);
     flat.setPieces(pieces, refit); refit = false;
-    editor.draw();
-    try { localStorage.setItem('ftm.auto', JSON.stringify(snapshot())); } catch (e) {}
+    editor.draw(); jedit.draw();
+    autosave();
   }
 
   function snapshot() { return Object.assign({}, state, { cam: view3d.getCam() }); }
@@ -60,6 +81,7 @@
     fields.forEach(k => $('in_' + k).value = state.curve[k]);
     $('closed').checked = state.polygon.closed;
     $('twist').value = state.twist;
+    $('jon').checked = state.joint.on; $('jw').value = state.joint.w; $('jm').value = state.joint.margin;
     $('scale').value = state.out.scale; $('unit').value = state.out.unit; $('exlabels').checked = state.out.labels;
   }
   fields.forEach(k => $('in_' + k).addEventListener('input', e => { state.curve[k] = e.target.value; refit = true; schedule(); }));
@@ -84,12 +106,37 @@
     syncInputs(); refit = true; schedule();
   }));
 
+  // ---- tabs, joint, flat tools ----
+  function showTab(t) {
+    $('v_poly').hidden = t !== 'poly'; $('v_joint').hidden = t !== 'joint';
+    $('tab_poly').classList.toggle('on', t === 'poly'); $('tab_joint').classList.toggle('on', t === 'joint');
+    editor.draw(); jedit.draw();
+  }
+  $('tab_poly').addEventListener('click', () => showTab('poly'));
+  $('tab_joint').addEventListener('click', () => { showTab('joint'); jedit.fit(); });
+  function mobileTab(m) {
+    document.body.dataset.m = m;
+    document.querySelectorAll('#mtabs button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+    if (m === 'poly' || m === 'joint') { showTab(m); if (m === 'joint') jedit.fit(); }
+    requestAnimationFrame(() => { view3d.draw(); flat.draw(); editor.draw(); jedit.draw(); });
+  }
+  document.querySelectorAll('#mtabs button').forEach(b => b.addEventListener('click', () => mobileTab(b.dataset.m)));
+  document.querySelectorAll('[data-jmode]').forEach(b => b.addEventListener('click', () => jedit.setMode(b.dataset.jmode)));
+  $('jsnap').addEventListener('change', e => jedit.setSnap(e.target.checked));
+  $('jundo').addEventListener('click', () => jedit.undo());
+  $('jon').addEventListener('change', e => { state.joint.on = e.target.checked; scheduleB(); });
+  $('jw').addEventListener('input', e => { state.joint.w = +e.target.value || state.joint.w; scheduleB(); jedit.fit(); });
+  $('jm').addEventListener('input', e => { state.joint.margin = Math.max(0, +e.target.value || 0); scheduleB(); });
+  document.querySelectorAll('[data-fmode]').forEach(b => b.addEventListener('click', () => flat.setMode(b.dataset.fmode)));
+  $('rotl').addEventListener('click', () => flat.rotateSel(5)); $('rotr').addEventListener('click', () => flat.rotateSel(-5));
+  $('relayout').addEventListener('click', () => { state.layout = {}; scheduleB(); });
+
   // ---- save / load ----
   function adopt(s) {
     Object.keys(state).forEach(k => delete state[k]);
     Object.assign(state, DEFAULT(), s);
     view3d.setCam(s.cam);
-    syncInputs(); refit = true; schedule();
+    syncInputs(); refit = true; schedule(); jedit.fit();
   }
   $('save').addEventListener('click', () => { try { localStorage.setItem('ftm.saved', JSON.stringify(snapshot())); setStatus('saved in this browser', false); } catch (e) { setStatus('save failed: ' + e.message, true); } });
   $('load').addEventListener('click', () => { try { const s = localStorage.getItem('ftm.saved'); if (!s) return setStatus('nothing saved yet', true); adopt(JSON.parse(s)); } catch (e) { setStatus('load failed: ' + e.message, true); } });
@@ -109,9 +156,9 @@
   });
   ex('svg', 'svg', 'image/svg+xml'); ex('dxf', 'dxf', 'application/dxf'); ex('eps', 'eps', 'application/postscript');
 
-  window.addEventListener('resize', () => { view3d.draw(); flat.draw(); editor.draw(); });
-  new ResizeObserver(() => { view3d.draw(); flat.draw(); editor.draw(); }).observe(document.body);
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { view3d.draw(); flat.draw(); editor.draw(); });
+  const redrawAll = () => { view3d.draw(); flat.draw(); editor.draw(); jedit.draw(); };
+  new ResizeObserver(redrawAll).observe(document.body);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll);
 
   view3d.setCam(state.cam);
   syncInputs();

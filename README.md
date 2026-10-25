@@ -8,5 +8,7 @@ Open `index.html` (no build, no dependencies).
 
 State autosaves to localStorage; Save/Load (browser) and Download/Open `.json`. Export SVG / DXF (R12) / EPS.
 
-## Next: slotting
-`js/slots.js` is the hook (`FTM.slots.apply(pieces, ctx)`); its header documents the per-piece seam data (rails, seam ids, mates, arclengths) a dovetail generator needs. Pieces carry `paths[]` with layers (`CUT` plus any extra layer, exported as separate layers).
+## Joints, splitting, rearranging
+- **Joint tab** (left panel): draw one dovetail cell in the seam's frame (x along the seam, y across). Above the line = tab of the piece owning the seam's B rail, below = socket. Ends are fixed. Cell width and end margin are set in the bar; the cell is repeated (re-fitted to the seam length, depth scaled with it) along every seam and every cut, so mating boundaries are the same curve and fit.
+- **Flat panel tools:** Move (drag a piece, `[` / `]` or the rotate buttons turn the selected piece, shift = 45°), Split (click a piece: cut across at the nearest ruling, with the joint along the cut), Join (click a cut to merge). Re-stack resets placements.
+- Code: `js/joints.js` (profile layout, boundary construction, splitting, placement), `js/jointedit.js` (profile editor). Seams are cut into independent segments at every split of either neighbouring edge, so mates always agree.

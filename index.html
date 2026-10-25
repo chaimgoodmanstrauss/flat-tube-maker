@@ -6,7 +6,7 @@
 <title>Flat Tube Maker</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-m="poly">
 <header>
   <b>Flat Tube Maker</b>
   <span class="sp"></span>
@@ -17,22 +17,46 @@
   <input type="file" id="file" accept=".json,application/json" hidden>
   <button id="reset">Reset</button>
 </header>
+<nav id="mtabs">
+  <button data-m="poly" class="on">Section</button><button data-m="joint">Joint</button><button data-m="3d">3D</button><button data-m="flat">Flat</button>
+</nav>
 <main>
   <section id="p1">
-    <div class="bar">
-      <b>1 &nbsp;Cross-section</b>
-      <span class="grp">
-        <button data-mode="add" title="Add vertex (A) — click on an edge to insert">Add</button>
-        <button data-mode="move" title="Move vertex (M)">Move</button>
-        <button data-mode="delete" title="Delete vertex (D, or right-click)">Delete</button>
-      </span>
-      <button id="undo" title="Undo (Ctrl/⌘-Z)">Undo</button>
-      <button id="fitpoly">Fit</button>
-      <label><input type="checkbox" id="closed"> closed</label>
-      <label><input type="checkbox" id="snap" checked> snap</label>
+    <div class="tabs">
+      <button id="tab_poly" class="on">1 &nbsp;Cross-section</button>
+      <button id="tab_joint">Joint</button>
     </div>
-    <canvas id="cpoly"></canvas>
-    <div class="foot"><span id="coords"></span> <span id="polywarn" class="bad"></span><span class="hint">wheel = zoom</span></div>
+    <div id="v_poly" class="view">
+      <div class="bar">
+        <span class="grp">
+          <button data-mode="add" title="Add vertex (A) — click on an edge to insert">Add</button>
+          <button data-mode="move" title="Move vertex (M)">Move</button>
+          <button data-mode="delete" title="Delete vertex (D, or right-click)">Delete</button>
+        </span>
+        <button id="undo" title="Undo (Ctrl/⌘-Z)">Undo</button>
+        <button id="fitpoly">Fit</button>
+        <label><input type="checkbox" id="closed"> closed</label>
+        <label><input type="checkbox" id="snap" checked> snap</label>
+      </div>
+      <canvas id="cpoly"></canvas>
+      <div class="foot"><span id="coords"></span> <span id="polywarn" class="bad"></span><span class="hint">wheel = zoom</span></div>
+    </div>
+    <div id="v_joint" class="view" hidden>
+      <div class="bar">
+        <span class="grp">
+          <button data-jmode="add" title="Add vertex (A)">Add</button>
+          <button data-jmode="move" title="Move vertex (M)">Move</button>
+          <button data-jmode="delete" title="Delete vertex (D, or right-click)">Delete</button>
+        </span>
+        <button id="jundo">Undo</button>
+        <label><input type="checkbox" id="jsnap" checked> snap</label>
+        <label><input type="checkbox" id="jon" checked> joints</label>
+        <label>cell width <input id="jw" type="number" step="any" min="0.01" class="s"></label>
+        <label>end margin <input id="jm" type="number" step="any" min="0" class="s"></label>
+      </div>
+      <canvas id="cjoint"></canvas>
+      <div class="foot"><span class="hint">one cell, repeated along every seam and cut; wheel = zoom</span></div>
+    </div>
   </section>
 
   <section id="p2">
@@ -50,6 +74,13 @@
   <section id="p3">
     <div class="bar">
       <b>3 &nbsp;Flat pieces</b>
+      <span class="grp">
+        <button data-fmode="move" title="Drag pieces; [ ] rotates the selected piece (shift = 45°)">Move</button>
+        <button data-fmode="split" title="Click a piece to cut it across, with a dovetail joint">Split</button>
+        <button data-fmode="join" title="Click a cut to merge the two pieces again">Join</button>
+      </span>
+      <button id="rotl" title="Rotate selected piece ([)">↺</button><button id="rotr" title="Rotate selected piece (])">↻</button>
+      <button id="relayout" title="Stack all pieces again">Re-stack</button>
       <label><input type="checkbox" id="o_rul"> rulings</label>
       <label><input type="checkbox" id="o_lab"> labels</label>
       <button id="fitflat">Fit</button>
@@ -60,7 +91,7 @@
       <button id="ex_svg">SVG</button><button id="ex_dxf">DXF</button><button id="ex_eps">EPS</button>
     </div>
     <canvas id="cflat"></canvas>
-    <div class="foot"><span class="hint">drag = pan, wheel = zoom &nbsp; · &nbsp; each piece = one polygon edge, unfolded triangle by triangle</span></div>
+    <div class="foot"><span class="hint">Move: drag piece, [ ] rotate &nbsp;·&nbsp; Split: click a piece &nbsp;·&nbsp; Join: click a cut &nbsp;·&nbsp; wheel = zoom</span></div>
   </section>
 </main>
 <footer>
@@ -89,7 +120,8 @@
 <script src="js/view3d.js"></script>
 <script src="js/flatview.js"></script>
 <script src="js/export.js"></script>
-<script src="js/slots.js"></script>
+<script src="js/joints.js"></script>
+<script src="js/jointedit.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

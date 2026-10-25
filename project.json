@@ -4,5 +4,5 @@
   "icon": "rings",
   "desc": "Sweep a polygon along a 3D curve (Bishop frame) and unfold the tube into flat pieces.",
   "path": "flat-tube-maker/",
-  "live": false
+  "live": true
 }

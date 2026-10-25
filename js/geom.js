@@ -175,13 +175,16 @@ window.FTM = window.FTM || {};
 
   function railLength3(r) { let s = 0; for (let i = 0; i < r.length - 1; i++) s += len(sub(r[i + 1], r[i])); return s; }
 
-  // Build flat pieces. One piece per polygon edge. Returns array of
-  // { id, label, edge, vA, vB, rails:{A,B}, paths:[{layer,closed,pts}], seams:[...], flatErr, length, ... }
-  FTM.buildPieces = function (poly, closed, Q, U, V) {
+  function cumLen(r) { const S = [0]; for (let i = 0; i < r.length - 1; i++) S.push(S[i] + len(sub(r[i + 1], r[i]))); return S; }
+
+  // Unfold one strip per polygon edge. Strips carry everything the later (joint / split / layout) stage needs.
+  // Returns [{ edge, N, A, B, SA, SB, nA, nB, seams, flatErr }] with A,B = unfolded 2D rails, S* = 3D arclengths,
+  // n* = outward unit normals of each rail in the flat.
+  FTM.buildStrips = function (poly, closed, Q, U, V) {
     const m = poly.length;
     const nEdges = closed ? m : m - 1;
     const orient = polyArea(poly) >= 0 ? 1 : -1;
-    const pieces = [];
+    const strips = [];
     for (let j = 0; j < nEdges; j++) {
       const k2 = (j + 1) % m;
       const a = Q[j], b = Q[k2];
@@ -191,7 +194,6 @@ window.FTM = window.FTM || {};
       const n3 = cross(sub(b[0], a[0]), sub(a[1], a[0]));
       const side = dot(n3, out3) >= 0 ? 1 : -1;
       const un = FTM.unfoldStrip(a, b, side);
-      // rotate so the piece's overall direction runs along +x
       const n = a.length;
       const m0 = [(un.A[0][0] + un.B[0][0]) / 2, (un.A[0][1] + un.B[0][1]) / 2];
       const m1 = [(un.A[n - 1][0] + un.B[n - 1][0]) / 2, (un.A[n - 1][1] + un.B[n - 1][1]) / 2];
@@ -199,22 +201,17 @@ window.FTM = window.FTM || {};
       const c = Math.cos(ang), s = Math.sin(ang);
       const rot = p => [c * p[0] - s * p[1], s * p[0] + c * p[1]];
       const A = un.A.map(rot), B = un.B.map(rot);
-      pieces.push({
-        id: j, label: 'P' + (j + 1), edge: j, vA: j, vB: k2,
-        rails: { A, B }, flatErr: un.maxErr,
-        length: { A: railLength3(a), B: railLength3(b) },
+      strips.push({
+        edge: j, N: n - 1, A, B, SA: cumLen(a), SB: cumLen(b),
+        nA: FTM.joints.railNormals(A, B), nB: FTM.joints.railNormals(B, A),
+        flatErr: un.maxErr,
         seams: [
           { rail: 'A', vertex: j, mate: closed || j > 0 ? (j - 1 + nEdges) % nEdges : null },
           { rail: 'B', vertex: k2, mate: closed || j < nEdges - 1 ? (j + 1) % nEdges : null },
         ],
       });
     }
-    layout(pieces);
-    for (const pc of pieces) {
-      // default cut outline: A rail forward, B rail backward. Slotting adds/replaces paths.
-      pc.paths = [{ layer: 'CUT', closed: true, pts: pc.rails.A.concat(pc.rails.B.slice().reverse()) }];
-    }
-    return pieces;
+    return strips;
   };
 
   function bbox(pts) {
@@ -223,19 +220,4 @@ window.FTM = window.FTM || {};
     return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
   }
   FTM.bbox = bbox;
-
-  // stack pieces vertically, each shifted so its bbox starts at x=0
-  function layout(pieces) {
-    if (!pieces.length) return;
-    const boxes = pieces.map(pc => bbox(pc.rails.A.concat(pc.rails.B)));
-    const gap = 0.3 * (boxes.reduce((s, b) => s + b.h, 0) / boxes.length) + 0.05 * Math.max(...boxes.map(b => b.w));
-    let y = 0;
-    pieces.forEach((pc, i) => {
-      const b = boxes[i], dx = -b.x0, dy = y - b.y0;
-      const sh = p => [p[0] + dx, p[1] + dy];
-      pc.rails.A = pc.rails.A.map(sh); pc.rails.B = pc.rails.B.map(sh);
-      pc.bbox = { x0: 0, y0: y, x1: b.w, y1: y + b.h, w: b.w, h: b.h };
-      y += b.h + gap;
-    });
-  }
 })();
