@@ -1,12 +1,12 @@
 // Joint profile editor: draws one joint cell in the frame of a seam (x along the seam, y across it).
-// Above the baseline = tab of the owning piece (pushes into the neighbour); below = socket side. Ends are fixed.
+// Paper lies below the line; up = outward from the piece. Ends are fixed. Neighbouring cells are plain translated copies.
 window.FTM = window.FTM || {};
 (function () {
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
   FTM.JointEditor = function (canvas, state, onChange) {
     const view = { s: 0 };
-    let mode = 'add', hover = -1, drag = -1, snapOn = true;
+    let mode = 'add', hover = -1, drag = -1, snapOn = false;
     const undo = [];
     const J = () => state.joint;
     const base = () => { const r = canvas.getBoundingClientRect(); return { W: r.width, H: r.height }; };
@@ -70,21 +70,22 @@ window.FTM = window.FTM || {};
       if (!view.s || view.s === 1) autoScale();
       ctx.fillStyle = css('--panel'); ctx.fillRect(0, 0, W, H);
       const pts = J().pts, o = org();
+      const row = [];
+      [[pts, -1], [pts, 0], [pts, 1]].forEach(([c, sh]) => c.forEach((p, i) => { if (row.length && !i) return; row.push([p[0] + sh, p[1]]); }));
+      const sr = row.map(toScr);
+      const poly = () => { ctx.beginPath(); sr.forEach((s, i) => i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1])); ctx.lineTo(sr[sr.length - 1][0], H); ctx.lineTo(sr[0][0], H); ctx.closePath(); };
+      // paper: light gray below the line (and under the curve), lighter inside the tabs above it
+      poly(); ctx.fillStyle = css('--paper'); ctx.fill();
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, o[1]); ctx.clip(); poly(); ctx.fillStyle = css('--paper2'); ctx.fill(); ctx.restore();
       ctx.lineWidth = 1; ctx.strokeStyle = css('--grid2'); ctx.beginPath(); ctx.moveTo(0, o[1] + 0.5); ctx.lineTo(W, o[1] + 0.5); ctx.stroke();
-      const path = (shift, col, lw) => {
-        ctx.beginPath();
-        pts.forEach((p, i) => { const s = toScr([p[0] + shift, p[1]]); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
-        ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke();
-      };
-      path(-1, css('--grid2'), 1.5); path(1, css('--grid2'), 1.5);
-      path(0, css('--poly'), 1.8);
-      // fixed ends + draggable vertices
+      const path = (list, col, lw) => { ctx.beginPath(); list.forEach((p, i) => { const s = toScr(p); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); }); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(); };
+      path(row, css('--grid2'), 1.5);
+      path(pts, css('--poly'), 1.8);
       pts.forEach((p, i) => {
         const s = toScr(p); ctx.beginPath(); ctx.arc(s[0], s[1], i === 0 || i === pts.length - 1 ? 3 : (i === hover || i === drag ? 6 : 4), 0, 7);
         ctx.fillStyle = i === 0 || i === pts.length - 1 ? css('--axis') : css('--vertex'); ctx.fill();
       });
-      ctx.font = '11px system-ui'; ctx.fillStyle = css('--muted');
-      ctx.fillText('↑ tab side', 8, 14); ctx.fillText('↓ socket side', 8, H - 8);
+      ctx.font = '11px system-ui';
       // scale bar
       const raw = 60 / view.s, e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e, bar = (f < 2 ? 1 : f < 5 ? 2 : 5) * e;
       ctx.strokeStyle = css('--axis'); ctx.fillStyle = css('--axis'); ctx.lineWidth = 1.5;
@@ -95,7 +96,7 @@ window.FTM = window.FTM || {};
     const api = {
       draw,
       setMode(m) { mode = m; document.querySelectorAll('[data-jmode]').forEach(b => b.classList.toggle('on', b.dataset.jmode === m)); },
-      setSnap(v) { snapOn = v; },
+      setPts(p) { pushUndo(); J().pts = p; onChange(); },
       undo() { const s = undo.pop(); if (s) { J().pts = JSON.parse(s); onChange(); } },
       fit() { autoScale(); draw(); },
     };

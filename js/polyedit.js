@@ -31,7 +31,7 @@ window.FTM = window.FTM || {};
 
   FTM.PolyEditor = function (canvas, state, onChange) {
     const view = { s: 160 };     // pixels per unit; origin is always the panel centre
-    let mode = 'add', hover = -1, drag = -1, snapOn = true;
+    let mode = 'add', hover = -1, drag = -1, snapOn = false, xform = null, xs = null;
     const undo = [];
     const poly = () => state.polygon;
     const toScr = (p, W, H) => [W / 2 + p[0] * view.s, H / 2 - p[1] * view.s];
@@ -69,6 +69,12 @@ window.FTM = window.FTM || {};
     canvas.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
       const [x, y] = mouse(e), [W, H] = size(), P = poly();
+      if (xform) {
+        const w = toWorld(x, y, W, H), r = Math.hypot(w[0], w[1]);
+        if (r < 1e-6) return;
+        pushUndo(); xs = { a: Math.atan2(w[1], w[0]), r, pts: P.pts.map(p => p.slice()) };
+        canvas.setPointerCapture(e.pointerId); return;
+      }
       const i = hit(x, y);
       if (mode === 'delete') { if (i >= 0) remove(i); return; }
       if (mode === 'move' && i < 0) return;
@@ -85,7 +91,12 @@ window.FTM = window.FTM || {};
     });
     canvas.addEventListener('pointermove', e => {
       const [x, y] = mouse(e), [W, H] = size();
-      if (drag >= 0) {
+      if (xs) {
+        const w = toWorld(x, y, W, H), r = Math.hypot(w[0], w[1]), da = xform === 'scale' ? 0 : Math.atan2(w[1], w[0]) - xs.a;
+        const k = xform === 'rotate' ? 1 : Math.max(0.02, r / xs.r), c = Math.cos(da) * k, s = Math.sin(da) * k;
+        poly().pts = xs.pts.map(p => [c * p[0] - s * p[1], s * p[0] + c * p[1]]);
+        onChange();
+      } else if (drag >= 0) {
         const w = toWorld(x, y, W, H);
         poly().pts[drag] = [snap(w[0]), snap(w[1])];
         onChange();
@@ -95,7 +106,7 @@ window.FTM = window.FTM || {};
       }
       coords(x, y, W, H);
     });
-    const end = () => { drag = -1; };
+    const end = () => { drag = -1; if (xs) { xs = null; api.setXform(null); } };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
     canvas.addEventListener('pointerleave', () => { hover = -1; draw(); });
@@ -148,8 +159,8 @@ window.FTM = window.FTM || {};
     const api = {
       draw,
       setMode(m) { mode = m; document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m)); canvas.dataset.mode = m; },
-      setSnap(v) { snapOn = v; },
-      setCoordEl(el) { coordEl = el; },
+      setXform(m) { xform = m; document.querySelectorAll('[data-xf]').forEach(b => b.classList.toggle('on', b.dataset.xf === m)); },
+      setPolygon(np, noUndo) { if (!noUndo) pushUndo(); state.polygon = np; onChange(); api.fit(); },
       undo() { const s = undo.pop(); if (s) { state.polygon = JSON.parse(s); onChange(); } },
       fit() {
         const [W, H] = size(); let mx = 0.25, my = 0.25;

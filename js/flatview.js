@@ -21,7 +21,8 @@ window.FTM = window.FTM || {};
   // cb: { split(piece, sampleIdx), join(edge, sampleIdx), changed() }
   FTM.FlatView = function (canvas, cb) {
     const v = { cx: 0, cy: 0, s: 10 };
-    const opt = { rulings: true, labels: true };
+    const opt = { rulings: false, labels: false };
+    let space = false;
     let pieces = [], mode = 'move', sel = null, op = null;
 
     const toScr = (p, W, H) => [W / 2 + (p[0] - v.cx) * v.s, H / 2 - (p[1] - v.cy) * v.s];
@@ -52,7 +53,7 @@ window.FTM = window.FTM || {};
           path.pts.forEach((p, i) => { const s = toScr(p, W, H); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
           if (path.closed) ctx.closePath();
           if (path.layer === 'CUT') { ctx.fillStyle = FTM.pieceColor(pc.edge, 0.88); ctx.fill(); }
-          ctx.strokeStyle = path.layer === 'CUT' ? FTM.pieceColor(pc.edge, 0.3) : '#c60'; ctx.lineWidth = isSel ? 2.6 : 1.3; ctx.stroke();
+          ctx.strokeStyle = path.layer === 'CUT' ? FTM.pieceColor(pc.edge, 0.3) : '#06f'; ctx.lineWidth = isSel ? 2.6 : 1.3; ctx.stroke();
         }
         if (opt.rulings) {
           const n = pc.rails.A.length, step = Math.max(1, Math.round((n - 1) / 70));
@@ -85,23 +86,17 @@ window.FTM = window.FTM || {};
 
     canvas.addEventListener('pointerdown', e => {
       const [x, y] = mouse(e), w = toWorld(x, y), pc = pieceAt(w);
+      if (space) { op = { type: 'pan', last: [e.clientX, e.clientY] }; canvas.setPointerCapture(e.pointerId); return; }
       if (mode === 'move') {
         if (pc) { sel = pc.key; op = { type: 'drag', pc, last: w }; } else { sel = null; op = { type: 'pan', last: [e.clientX, e.clientY] }; }
         draw();
       } else if (mode === 'split') {
+        api.setMode('move'); // one-shot: the next click either splits a piece or just deselects the tool
         if (!pc) return;
         const l = pc.toLocal(w), A = pc.local.A, B = pc.local.B;
         let best = -1, bd = Infinity;
         for (let k = 1; k < A.length - 1; k++) { const d = segDist(l, A[k], B[k]); if (d < bd) { bd = d; best = k; } }
         if (best > 0) cb.split(pc, pc.i0 + best);
-        return;
-      } else if (mode === 'join') {
-        let best = null, bd = 14 / v.s;
-        for (const q of pieces) {
-          if (q.i0 > 0) { const d = segDist(w, q.rails.A[0], q.rails.B[0]); if (d < bd) { bd = d; best = [q.edge, q.i0]; } }
-          if (q.i1 < q.N) { const n = q.rails.A.length - 1, d = segDist(w, q.rails.A[n], q.rails.B[n]); if (d < bd) { bd = d; best = [q.edge, q.i1]; } }
-        }
-        if (best) cb.join(best[0], best[1]);
         return;
       }
       canvas.setPointerCapture(e.pointerId);
@@ -129,12 +124,17 @@ window.FTM = window.FTM || {};
     }
     document.addEventListener('keydown', e => {
       if (/input|textarea|select/i.test(document.activeElement.tagName)) return;
+      if (e.key === ' ') { space = true; canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === '[') rotateSel(e.shiftKey ? 45 : 5); else if (e.key === ']') rotateSel(e.shiftKey ? -45 : -5);
     });
 
-    return {
+    document.addEventListener('keyup', e => { if (e.key === ' ') { space = false; canvas.style.cursor = ''; } });
+    window.addEventListener('blur', () => { space = false; canvas.style.cursor = ''; });
+
+    const api = {
       draw, setPieces, fit, opt, rotateSel,
       setMode(m) { mode = m; document.querySelectorAll('[data-fmode]').forEach(b => b.classList.toggle('on', b.dataset.fmode === m)); canvas.dataset.mode = m; },
     };
+    return api;
   };
 })();

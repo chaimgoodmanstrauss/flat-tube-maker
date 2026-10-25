@@ -26,7 +26,7 @@
       <button id="tab_poly" class="on">1 &nbsp;Cross-section</button>
       <button id="tab_joint">Joint</button>
     </div>
-    <div id="v_poly" class="view">
+    <div id="v_poly" class="view rel">
       <div class="bar">
         <span class="grp">
           <button data-mode="add" title="Add vertex (A) — click on an edge to insert">Add</button>
@@ -34,12 +34,17 @@
           <button data-mode="delete" title="Delete vertex (D, or right-click)">Delete</button>
         </span>
         <button id="undo" title="Undo (Ctrl/⌘-Z)">Undo</button>
-        <button id="fitpoly">Fit</button>
-        <label><input type="checkbox" id="closed"> closed</label>
-        <label><input type="checkbox" id="snap" checked> snap</label>
+        <span class="grp"><button data-xf="rotate" title="Then drag: rotate the polygon about the origin">Rotate</button><button data-xf="homothety" title="Then drag: scale and rotate about the origin">Homothety</button><button data-xf="scale" title="Then drag: scale about the origin">Scale</button></span>
+        <span class="grp"><button id="sh_reg">Regular</button><button id="sh_star">Star</button><button id="sh_seg">Segment</button></span>
       </div>
       <canvas id="cpoly"></canvas>
-      <div class="foot"><span id="coords"></span> <span id="polywarn" class="bad"></span><span class="hint">wheel = zoom</span></div>
+      <div id="sdlg" class="float" hidden>
+        <div class="ftitle"><b id="sdtitle">Regular polygon</b><button id="sdclose" title="Close">×</button></div>
+        <label>sides <input id="sd_n" type="number" min="3" max="200" value="6" class="s"></label>
+        <label id="sd_rl">inner radius <input id="sd_r" type="number" min="0.05" max="0.95" step="0.05" value="0.4" class="s"></label>
+        <button id="sd_ok">OK</button>
+      </div>
+      <div class="foot"><span id="polywarn" class="bad"></span></div>
     </div>
     <div id="v_joint" class="view" hidden>
       <div class="bar">
@@ -49,52 +54,26 @@
           <button data-jmode="delete" title="Delete vertex (D, or right-click)">Delete</button>
         </span>
         <button id="jundo">Undo</button>
-        <label><input type="checkbox" id="jsnap" checked> snap</label>
-        <label><input type="checkbox" id="jon" checked> joints</label>
-        <label>cell width <input id="jw" type="number" step="any" min="0.01" class="s"></label>
-        <label>end margin <input id="jm" type="number" step="any" min="0" class="s"></label>
+        <button id="jdove" title="Reset to a simple dovetail above the edge">Dovetail</button>
       </div>
       <canvas id="cjoint"></canvas>
-      <div class="foot"><span class="hint">one cell, repeated along every seam and cut; wheel = zoom</span></div>
     </div>
   </section>
 
   <section id="p2">
     <div class="bar">
       <b>2 &nbsp;Curve &amp; tube</b>
-      <label><input type="checkbox" id="o_tube"> tube</label>
-      <label><input type="checkbox" id="o_wire"> wire</label>
-      <label><input type="checkbox" id="o_frames"> Bishop frames</label>
-      <button id="reset3d">Reset view</button>
+      <button id="formula" title="Edit x(t), y(t), z(t)">Formula</button>
+      <span class="presets">
+        <button data-preset="t cos t|t sin t|sin 3t|2|4pi">spiral</button>
+      <button data-preset="(3+cos 3t) cos 2t|(3+cos 3t) sin 2t|sin 3t|0|2pi">knot</button>
+      <button data-preset="3cos t|3sin t|t/2|0|6pi">helix</button>
+      <button data-preset="2cos t|sin 2t|t/3|0|3pi">bend</button>
+      </span>
     </div>
     <canvas id="c3d"></canvas>
-    <div class="foot"><span class="hint">drag = rotate, wheel = zoom &nbsp; · &nbsp; red: centre curve, <span style="color:#2a8">●</span> start, <span style="color:#e33">●</span> end</span></div>
-  </section>
-
-  <section id="p3">
-    <div class="bar">
-      <b>3 &nbsp;Flat pieces</b>
-      <span class="grp">
-        <button data-fmode="move" title="Drag pieces; [ ] rotates the selected piece (shift = 45°)">Move</button>
-        <button data-fmode="split" title="Click a piece to cut it across, with a dovetail joint">Split</button>
-        <button data-fmode="join" title="Click a cut to merge the two pieces again">Join</button>
-      </span>
-      <button id="rotl" title="Rotate selected piece ([)">↺</button><button id="rotr" title="Rotate selected piece (])">↻</button>
-      <button id="relayout" title="Stack all pieces again">Re-stack</button>
-      <label><input type="checkbox" id="o_rul"> rulings</label>
-      <label><input type="checkbox" id="o_lab"> labels</label>
-      <button id="fitflat">Fit</button>
-      <span class="sp"></span>
-      <label>scale <input id="scale" type="number" step="any" value="1" style="width:5em"></label>
-      <select id="unit"><option>mm</option><option>in</option><option>px</option></select>
-      <label><input type="checkbox" id="exlabels"> labels in file</label>
-      <button id="ex_svg">SVG</button><button id="ex_dxf">DXF</button><button id="ex_eps">EPS</button>
-    </div>
-    <canvas id="cflat"></canvas>
-    <div class="foot"><span class="hint">Move: drag piece, [ ] rotate &nbsp;·&nbsp; Split: click a piece &nbsp;·&nbsp; Join: click a cut &nbsp;·&nbsp; wheel = zoom</span></div>
-  </section>
-</main>
-<footer>
+    <div id="fdlg" class="float" hidden>
+      <div class="ftitle"><b>Curve formula</b><button id="fclose" title="Close">×</button></div>
   <div class="eqs">
     <label>x(t) <input id="in_x" spellcheck="false" autocomplete="off"></label>
     <label>y(t) <input id="in_y" spellcheck="false" autocomplete="off"></label>
@@ -104,14 +83,30 @@
     <label>t from <input id="in_t0" class="s" spellcheck="false"></label>
     <label>to <input id="in_t1" class="s" spellcheck="false"></label>
     <label>samples <input id="in_n" class="s" type="number" min="2" max="3000"></label>
-    <label>twist° <input id="twist" class="s" type="number" step="any"></label>
-    <span class="presets">
-      <button data-preset="t cos t|t sin t|sin 3t|2|4pi">spiral</button>
-      <button data-preset="(3+cos 3t) cos 2t|(3+cos 3t) sin 2t|sin 3t|0|2pi">knot</button>
-      <button data-preset="3cos t|3sin t|t/2|0|6pi">helix</button>
-      <button data-preset="2cos t|sin 2t|t/3|0|3pi">bend</button>
-    </span>
   </div>
+    </div>
+  </section>
+
+  <section id="p3">
+    <div class="bar">
+      <b>3 &nbsp;Flat pieces</b>
+      <span class="grp">
+        <button data-fmode="move" title="Drag pieces; [ ] rotates the selected piece (shift = 45°)">Move</button>
+        <button data-fmode="split" title="Then click a piece to cut it across at that spot">Split</button>
+      </span>
+      <button id="rotl" title="Rotate selected piece ([)">↺</button><button id="rotr" title="Rotate selected piece (])">↻</button>
+      <button id="relayout" title="Stack all pieces again">Re-stack</button>
+      <label><input type="checkbox" id="jon" checked> joints</label>
+      <span class="sp"></span>
+      <label>scale <input id="scale" type="number" step="any" value="1" style="width:5em"></label>
+      <select id="unit"><option>mm</option><option>in</option><option>px</option></select>
+      <label><input type="checkbox" id="exlabels"> label cuts</label>
+      <button id="ex_svg">SVG</button><button id="ex_dxf">DXF</button><button id="ex_eps">EPS</button>
+    </div>
+    <canvas id="cflat"></canvas>
+  </section>
+</main>
+<footer>
   <div id="status"></div>
 </footer>
 <script src="js/expr.js"></script>
@@ -120,6 +115,7 @@
 <script src="js/view3d.js"></script>
 <script src="js/flatview.js"></script>
 <script src="js/export.js"></script>
+<script src="js/label.js"></script>
 <script src="js/joints.js"></script>
 <script src="js/jointedit.js"></script>
 <script src="js/app.js"></script>

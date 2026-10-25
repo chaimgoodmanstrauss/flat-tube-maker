@@ -5,7 +5,7 @@ window.FTM = window.FTM || {};
 
   FTM.View3D = function (canvas) {
     const cam = { yaw: -0.7, pitch: 0.55, zoom: 1 };
-    const opt = { tube: true, wire: true, frames: false };
+    const opt = { tube: true }; // wireframe and frames are never drawn
     let model = null, center = [0, 0, 0], R = 1;
 
     function setModel(m) {
@@ -67,31 +67,12 @@ window.FTM = window.FTM || {};
           ctx.fill(); ctx.lineWidth = 0.6; ctx.stroke();
         }
       }
-      if (opt.wire && m) {
-        ctx.strokeStyle = css('--wire'); ctx.lineWidth = 0.8;
-        const S = Q.map(r => r.map(pr));
-        S.forEach(r => { ctx.beginPath(); r.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); });
-        const step = Math.max(1, Math.round(N / 60));
-        for (let i = 0; i <= N; i += step) {
-          ctx.beginPath(); S.forEach((r, k) => k ? ctx.lineTo(r[i][0], r[i][1]) : ctx.moveTo(r[i][0], r[i][1]));
-          if (closed) ctx.closePath(); ctx.stroke();
-        }
-      }
       // centre curve
       const C = P.map(pr);
       ctx.strokeStyle = '#e33'; ctx.lineWidth = 2; ctx.beginPath();
       C.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
       ctx.fillStyle = '#2a8'; ctx.beginPath(); ctx.arc(C[0][0], C[0][1], 4, 0, 7); ctx.fill();
       ctx.fillStyle = '#e33'; ctx.beginPath(); ctx.arc(C[N][0], C[N][1], 4, 0, 7); ctx.fill();
-      if (opt.frames) {
-        const step = Math.max(1, Math.round(N / 24)), s = R * 0.08;
-        for (let i = 0; i <= N; i += step) {
-          [[model.U[i], '#d80'], [model.V[i], '#80d'], [model.T[i], '#888']].forEach(([d, c], idx) => {
-            const e = idx === 2 ? s * 1.4 : s, a = pr(P[i]), b = pr([P[i][0] + d[0] * e, P[i][1] + d[1] * e, P[i][2] + d[2] * e]);
-            ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
-          });
-        }
-      }
     }
 
     let last = null;
