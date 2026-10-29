@@ -56,6 +56,20 @@ window.FTM = window.FTM || {};
     return { U, V };
   };
 
+  // Jacobian of (t,u,v) -> P + uU + vV is d + a u + b v (d = P'.T, a = U'.T, b = V'.T). Returns, per sample, the
+  // half-plane {a u + b v + c < 0} of cross-section points where the tube has negative volume sign (past the centre
+  // of curvature), oriented so that the sample's own sign convention is positive at the origin.
+  FTM.negVolume = function (P, U, V) {
+    const n = P.length, d = (A, i) => { const a = A[Math.max(0, i - 1)], b = A[Math.min(n - 1, i + 1)]; return mul(sub(b, a), 1 / (Math.min(n - 1, i + 1) - Math.max(0, i - 1) || 1)); };
+    const raw = [];
+    for (let i = 0; i < n; i++) {
+      const N = cross(U[i], V[i]);
+      raw.push({ c: dot(d(P, i), N), a: dot(d(U, i), N), b: dot(d(V, i), N) });
+    }
+    const cs = raw.map(r => r.c).sort((x, y) => x - y), sg = cs[cs.length >> 1] >= 0 ? 1 : -1;
+    return raw.map(r => ({ a: r.a * sg, b: r.b * sg, c: r.c * sg }));
+  };
+
   // Q[k][i] = P_i + x_k U_i + y_k V_i
   FTM.sweep = function (poly, P, U, V) {
     return poly.map(([x, y]) => P.map((p, i) => [

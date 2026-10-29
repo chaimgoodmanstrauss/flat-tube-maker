@@ -25,7 +25,7 @@ window.FTM = window.FTM || {};
     s += `<g id="CUT" fill="none" stroke="#ff0000" stroke-width="${sw}" stroke-linejoin="round">\n`;
     for (const p of paths) {
       const d = p.pts.map((q, i) => (i ? 'L' : 'M') + f(q[0]) + ' ' + f(-q[1])).join(' ') + (p.closed ? ' Z' : '');
-      s += `<path data-layer="${p.layer}"${p.layer !== 'CUT' ? ' stroke="#0000ff"' : ''} d="${d}"/>\n`;
+      s += `<path data-layer="${p.layer}"${p.layer === 'OVERLAP' ? ' stroke="#ff6600"' : p.layer !== 'CUT' ? ' stroke="#0000ff"' : ''} d="${d}"/>\n`;
     }
     s += '</g>\n';
     return s + '</svg>\n';
@@ -37,7 +37,7 @@ window.FTM = window.FTM || {};
     const layers = [...new Set(paths.map(p => p.layer))];
     let s = g(0, 'SECTION') + g(2, 'HEADER') + g(9, '$ACADVER') + g(1, 'AC1009') + g(9, '$INSUNITS') + g(70, cfg.unit === 'mm' ? 4 : cfg.unit === 'in' ? 1 : 0) + g(0, 'ENDSEC');
     s += g(0, 'SECTION') + g(2, 'TABLES') + g(0, 'TABLE') + g(2, 'LAYER') + g(70, layers.length);
-    layers.forEach((l, i) => { s += g(0, 'LAYER') + g(2, l) + g(70, 0) + g(62, l === 'CUT' ? 1 : 5) + g(6, 'CONTINUOUS'); });
+    layers.forEach((l, i) => { s += g(0, 'LAYER') + g(2, l) + g(70, 0) + g(62, l === 'CUT' ? 1 : l === 'OVERLAP' ? 30 : 5) + g(6, 'CONTINUOUS'); });
     s += g(0, 'ENDTAB') + g(0, 'ENDSEC') + g(0, 'SECTION') + g(2, 'ENTITIES');
     for (const p of paths) {
       s += g(0, 'POLYLINE') + g(8, p.layer) + g(66, 1) + g(10, 0) + g(20, 0) + g(30, 0) + g(70, p.closed ? 1 : 0);
@@ -53,7 +53,7 @@ window.FTM = window.FTM || {};
     let s = `%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: ${Math.floor(bb[0])} ${Math.floor(bb[1])} ${Math.ceil(bb[2])} ${Math.ceil(bb[3])}\n%%HiResBoundingBox: ${f(bb[0])} ${f(bb[1])} ${f(bb[2])} ${f(bb[3])}\n%%Creator: Flat Tube Maker\n%%EndComments\n`;
     s += `${f(k)} ${f(k)} scale\n1 0 0 setrgbcolor ${f(cfg.unit === 'in' ? 0.004 : cfg.unit === 'mm' ? 0.1 : 0.5)} setlinewidth 1 setlinejoin\n`;
     for (const p of paths) {
-      s += (p.layer === 'CUT' ? '1 0 0' : '0 0 1') + ' setrgbcolor\nnewpath\n' + p.pts.map((q, i) => `${f(q[0])} ${f(q[1])} ${i ? 'lineto' : 'moveto'}`).join('\n') + (p.closed ? '\nclosepath' : '') + '\nstroke\n';
+      s += (p.layer === 'CUT' ? '1 0 0' : p.layer === 'OVERLAP' ? '1 0.4 0' : '0 0 1') + ' setrgbcolor\nnewpath\n' + p.pts.map((q, i) => `${f(q[0])} ${f(q[1])} ${i ? 'lineto' : 'moveto'}`).join('\n') + (p.closed ? '\nclosepath' : '') + '\nstroke\n';
     }
     return s + 'showpage\n%%EOF\n';
   };

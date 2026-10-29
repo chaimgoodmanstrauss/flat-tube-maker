@@ -10,6 +10,7 @@ window.FTM = window.FTM || {};
   // default cell: a simple dovetail tab above the edge (paper below the line)
 // unit cell x in [-.5,.5] shown as [0,1]: neck at +-.25, head at +-.45, height .4
 J.DOVETAIL = [[0, 0], [0.25, 0], [0.25, 0.1], [0.05, 0.2], [0.05, 0.4], [0.95, 0.4], [0.95, 0.2], [0.75, 0.1], [0.75, 0], [1, 0]];
+J.OVERLAP = 0.25; // arc length of the overlap flap past a split
 J.defaults = () => ({ on: true, w: 1, margin: 0.5, pts: J.DOVETAIL.map(p => p.slice()) });
 // earlier defaults, migrated to the current one when found in saved state
 J.OLD_DEFAULTS = [JSON.stringify([[0, 0], [0.35, 0], [0.25, 0.3], [0.75, 0.3], [0.65, 0], [1, 0]]), JSON.stringify([[0, 0], [0.2, 0], [0.15, 0.3], [0.35, 0.3], [0.3, 0], [0.7, 0], [0.65, -0.3], [0.85, -0.3], [0.8, 0], [1, 0]])];
@@ -132,15 +133,25 @@ J.OLD_DEFAULTS = [JSON.stringify([[0, 0], [0.35, 0], [0.25, 0.3], [0.75, 0.3], [
     };
     strips.forEach(st => {
       const cuts = cutsOf(st.edge), bounds = [0, ...cuts, st.N];
+      // each piece that is followed by a cut overlaps the next one: its plain (joint-free) flap runs on past the cut
+      const mid = i => (st.SA[i] + st.SB[i]) / 2, ov = ctx.overlap === undefined ? J.OVERLAP : ctx.overlap;
+      const ie = bounds.map((b, q) => {
+        if (q >= bounds.length - 1) return b;
+        const i1 = bounds[q + 1];
+        if (i1 >= st.N) return i1;
+        const cap = i1 + ((bounds[q + 2] - i1) >> 1);
+        let e = i1; while (e < cap && mid(e + 1) - mid(i1) <= ov) e++;
+        return e;
+      });
       for (let q = 0; q < bounds.length - 1; q++) {
-        const i0 = bounds[q], i1 = bounds[q + 1];
+        const i0 = bounds[q], i1 = bounds[q + 1], i1e = ie[q], flap = i1e > i1, flapIn = q > 0 && ie[q - 1] > i0;
         const label = 'P' + (st.edge + 1) + (cuts.length ? String.fromCharCode(97 + q) : '');
-        const pA = railPath(st, 'A', i0, i1), pB = railPath(st, 'B', i0, i1);
+        const pA = railPath(st, 'A', i0, i1).concat(st.A.slice(i1 + 1, i1e + 1)), pB = railPath(st, 'B', i0, i1).concat(st.B.slice(i1 + 1, i1e + 1));
         let outline = pA.slice();
-        if (i1 < st.N) outline = outline.concat(cutPath(st.A[i1], st.B[i1], fwdAt(st, i1), jt).slice(1, -1));
+        if (i1 < st.N && !flap) outline = outline.concat(cutPath(st.A[i1], st.B[i1], fwdAt(st, i1), jt).slice(1, -1));
         outline = outline.concat(pB.slice().reverse());
-        if (i0 > 0) outline = outline.concat(cutPath(st.A[i0], st.B[i0], fwdAt(st, i0).map(v => -v), jt).slice(1, -1).reverse());
-        const A = st.A.slice(i0, i1 + 1), B = st.B.slice(i0, i1 + 1);
+        if (i0 > 0 && !flapIn) outline = outline.concat(cutPath(st.A[i0], st.B[i0], fwdAt(st, i0).map(v => -v), jt).slice(1, -1).reverse());
+        const A = st.A.slice(i0, i1e + 1), B = st.B.slice(i0, i1e + 1);
         // local frame: chord along +x, centred on the bbox
         const n = A.length;
         const m0 = [(A[0][0] + B[0][0]) / 2, (A[0][1] + B[0][1]) / 2], m1 = [(A[n - 1][0] + B[n - 1][0]) / 2, (A[n - 1][1] + B[n - 1][1]) / 2];
@@ -152,10 +163,11 @@ J.OLD_DEFAULTS = [JSON.stringify([[0, 0], [0.35, 0], [0.25, 0.3], [0.75, 0.3], [
         lo = lo.map(sh);
         const local = { outline: lo, A: A.map(rot).map(sh), B: B.map(rot).map(sh), w: bb.w, h: bb.h };
         local.paths = [{ layer: 'CUT', closed: true, pts: lo }];
+        if (flapIn) { const k = ie[q - 1] - i0; local.paths.push({ layer: 'OVERLAP', closed: false, pts: [local.A[k], local.B[k]] }); } // where the previous piece's flap ends
         if (ctx.labels) local.paths.push(...FTM.labelPaths(label, local.A, local.B));
         const arc = (S) => S[i1] - S[i0];
         const pc = {
-          key: st.edge + ':' + i0, edge: st.edge, i0, i1, N: st.N, id: pieces.length,
+          key: st.edge + ':' + i0, edge: st.edge, i0, i1, nOwn: i1 - i0, N: st.N, id: pieces.length,
           label,
           flatErr: st.flatErr, length: { A: arc(st.SA), B: arc(st.SB) }, seams: st.seams, local,
           xf: null, rails: {}, paths: local.paths.map(p => ({ layer: p.layer, closed: p.closed, pts: [] })), bbox: null,

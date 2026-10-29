@@ -4,7 +4,7 @@
   const DEFAULT = () => ({
     v: 1,
     polygon: { closed: true, pts: [0, 1, 2, 3, 4, 5].map(k => [+(0.5 * Math.cos(k * Math.PI / 3)).toFixed(3), +(0.5 * Math.sin(k * Math.PI / 3)).toFixed(3)]) },
-    curve: { x: 't cos t', y: 't sin t', z: 'sin 3t', t0: '2', t1: '4pi', n: 300 },
+    curve: { x: '.25t cos t', y: '.25t sin t', z: '.25t', t0: '2', t1: '4pi', n: 300 },
     out: { scale: 1, unit: 'mm', cutLabels: true },
     joint: FTM.joints.defaults(),
     splits: {},
@@ -49,6 +49,7 @@
     const closed = state.polygon.closed = true;
     const drawn = state.polygon.pts, poly = closed ? FTM.resolvePolygon(drawn) : drawn;
     const Q = FTM.sweep(poly, cur.P, fr.U, fr.V);
+    editor.setNeg(FTM.negVolume(cur.P, fr.U, fr.V));
     model = { P: cur.P, T: cur.T, U: fr.U, V: fr.V, Q, closed };
     strips = FTM.buildStrips(poly, closed, Q, fr.U, fr.V);
     nSamples = n;
@@ -149,7 +150,6 @@
   $('jdove').addEventListener('click', () => jedit.setPts(FTM.joints.DOVETAIL.map(p => p.slice())));
   $('jon').addEventListener('change', e => { state.joint.on = e.target.checked; scheduleB(); });
   document.querySelectorAll('[data-fmode]').forEach(b => b.addEventListener('click', () => flat.setMode(b.dataset.fmode)));
-  $('rotl').addEventListener('click', () => flat.rotateSel(5)); $('rotr').addEventListener('click', () => flat.rotateSel(-5));
   $('relayout').addEventListener('click', () => { state.layout = {}; scheduleB(); });
 
   // ---- save / load ----

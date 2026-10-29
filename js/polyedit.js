@@ -31,7 +31,7 @@ window.FTM = window.FTM || {};
 
   FTM.PolyEditor = function (canvas, state, onChange) {
     const view = { s: 160 };     // pixels per unit; origin is always the panel centre
-    let mode = 'add', hover = -1, drag = -1, snapOn = false, xform = null, xs = null;
+    let neg = [], mode = 'add', hover = -1, drag = -1, snapOn = false, xform = null, xs = null;
     const undo = [];
     const poly = () => state.polygon;
     const toScr = (p, W, H) => [W / 2 + p[0] * view.s, H / 2 - p[1] * view.s];
@@ -130,6 +130,21 @@ window.FTM = window.FTM || {};
       const { ctx, w: W, h: H } = FTM.fitCanvas(canvas);
       ctx.fillStyle = css('--panel'); ctx.fillRect(0, 0, W, H);
       const ox = W / 2, oy = H / 2;
+      // negative-volume region: cross-section points past the centre of curvature at some sample
+      if (neg.length) {
+        const R = Math.hypot(W, H) / 2 / view.s, hp = neg.filter(q => q.c < R * Math.hypot(q.a, q.b));
+        if (hp.length) {
+          const st = 3; ctx.fillStyle = 'rgba(220,60,60,.28)';
+          for (let y = 0; y < H; y += st) {
+            const v = -(y + st / 2 - H / 2) / view.s;
+            for (let x = 0, run = -1; x <= W; x += st) {
+              let bad = false;
+              if (x < W) { const u = (x + st / 2 - W / 2) / view.s; for (const q of hp) if (q.a * u + q.b * v + q.c < 0) { bad = true; break; } }
+              if (bad && run < 0) run = x; else if (!bad && run >= 0) { ctx.fillRect(run, y, x - run, st); run = -1; }
+            }
+          }
+        }
+      }
       // origin
       ctx.fillStyle = css('--axis'); ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 7); ctx.fill();
       // unit scale bar (1, 2, 5 x 10^k units)
@@ -159,6 +174,7 @@ window.FTM = window.FTM || {};
     const api = {
       draw,
       setMode(m) { mode = m; document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m)); canvas.dataset.mode = m; },
+      setNeg(h) { neg = h; },
       setXform(m) { xform = m; document.querySelectorAll('[data-xf]').forEach(b => b.classList.toggle('on', b.dataset.xf === m)); },
       setPolygon(np, noUndo) { if (!noUndo) pushUndo(); state.polygon = np; onChange(); api.fit(); },
       undo() { const s = undo.pop(); if (s) { state.polygon = JSON.parse(s); onChange(); } },

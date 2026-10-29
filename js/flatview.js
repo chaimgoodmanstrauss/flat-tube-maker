@@ -53,7 +53,7 @@ window.FTM = window.FTM || {};
           path.pts.forEach((p, i) => { const s = toScr(p, W, H); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
           if (path.closed) ctx.closePath();
           if (path.layer === 'CUT') { ctx.fillStyle = FTM.pieceColor(pc.edge, 0.88); ctx.fill(); }
-          ctx.strokeStyle = path.layer === 'CUT' ? FTM.pieceColor(pc.edge, 0.3) : '#06f'; ctx.lineWidth = isSel ? 2.6 : 1.3; ctx.stroke();
+          ctx.strokeStyle = path.layer === 'CUT' ? FTM.pieceColor(pc.edge, 0.3) : path.layer === 'OVERLAP' ? '#e60' : '#06f'; ctx.lineWidth = path.layer === 'OVERLAP' ? 1.8 : isSel ? 2.6 : 1.3; ctx.stroke();
         }
         if (opt.rulings) {
           const n = pc.rails.A.length, step = Math.max(1, Math.round((n - 1) / 70));
@@ -95,7 +95,7 @@ window.FTM = window.FTM || {};
         if (!pc) return;
         const l = pc.toLocal(w), A = pc.local.A, B = pc.local.B;
         let best = -1, bd = Infinity;
-        for (let k = 1; k < A.length - 1; k++) { const d = segDist(l, A[k], B[k]); if (d < bd) { bd = d; best = k; } }
+        for (let k = 1; k < pc.nOwn; k++) { const d = segDist(l, A[k], B[k]); if (d < bd) { bd = d; best = k; } }
         if (best > 0) cb.split(pc, pc.i0 + best);
         return;
       }
