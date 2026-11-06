@@ -150,6 +150,7 @@
   $('jdove').addEventListener('click', () => jedit.setPts(FTM.joints.DOVETAIL.map(p => p.slice())));
   $('jon').addEventListener('change', e => { state.joint.on = e.target.checked; scheduleB(); });
   document.querySelectorAll('[data-fmode]').forEach(b => b.addEventListener('click', () => flat.setMode(b.dataset.fmode)));
+  $('resetsplit').addEventListener('click', () => { state.splits = {}; state.layout = {}; scheduleB(); });
   $('relayout').addEventListener('click', () => { state.layout = {}; scheduleB(); });
 
   // ---- save / load ----
@@ -169,6 +170,15 @@
     e.target.value = '';
   });
   $('reset').addEventListener('click', () => { if (confirm('Reset to defaults?')) adopt(DEFAULT()); });
+
+  // cmd-option-{ : copy the current state (same JSON as the download button) to the clipboard
+  document.addEventListener('keydown', e => {
+    if (!(e.metaKey && e.altKey && e.code === 'BracketLeft')) return;
+    e.preventDefault();
+    const txt = JSON.stringify(snapshot(), null, 1);
+    const fallback = () => { const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); setStatus(ok ? 'state copied to clipboard' : 'copy failed', !ok); };
+    (navigator.clipboard ? navigator.clipboard.writeText(txt).then(() => setStatus('state copied to clipboard', false)) : Promise.reject()).catch(fallback);
+  });
 
   // ---- export ----
   const ex = (kind, ext, mime) => $('ex_' + kind).addEventListener('click', () => {

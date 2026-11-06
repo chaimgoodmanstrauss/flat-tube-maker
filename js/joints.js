@@ -164,6 +164,7 @@ J.OLD_DEFAULTS = [JSON.stringify([[0, 0], [0.35, 0], [0.25, 0.3], [0.75, 0.3], [
         const local = { outline: lo, A: A.map(rot).map(sh), B: B.map(rot).map(sh), w: bb.w, h: bb.h };
         local.paths = [{ layer: 'CUT', closed: true, pts: lo }];
         if (flapIn) { const k = ie[q - 1] - i0; local.paths.push({ layer: 'OVERLAP', closed: false, pts: [local.A[k], local.B[k]] }); } // where the previous piece's flap ends
+        local.paths.push({ layer: 'CENTER', closed: false, pts: local.A.map((a, k) => [(a[0] + local.B[k][0]) / 2, (a[1] + local.B[k][1]) / 2]) }); // invisible centre line, SVG only
         if (ctx.labels) local.paths.push(...FTM.labelPaths(label, local.A, local.B));
         const arc = (S) => S[i1] - S[i0];
         const pc = {

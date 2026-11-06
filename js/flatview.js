@@ -49,6 +49,7 @@ window.FTM = window.FTM || {};
       pieces.forEach(pc => {
         const isSel = pc.key === sel;
         for (const path of pc.paths) {
+          if (path.layer === 'CENTER') continue;
           ctx.beginPath();
           path.pts.forEach((p, i) => { const s = toScr(p, W, H); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); });
           if (path.closed) ctx.closePath();

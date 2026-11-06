@@ -9,9 +9,9 @@ window.FTM = window.FTM || {};
     const k = cfg.scale;
     const paths = [];
     for (const pc of pieces) {
-      for (const p of pc.paths) paths.push({ layer: p.layer, closed: p.closed, pts: p.pts.map(q => [q[0] * k, q[1] * k]) });
+      for (const p of pc.paths) paths.push({ piece: pc.label, layer: p.layer, closed: p.closed, pts: p.pts.map(q => [q[0] * k, q[1] * k]) });
     }
-    const all = paths.flatMap(p => p.pts);
+    const all = paths.filter(p => p.layer !== 'CENTER').flatMap(p => p.pts);
     const b = FTM.bbox(all.length ? all : [[0, 0]]);
     const pad = 0.02 * Math.max(b.w, b.h, 1);
     return { paths, b: { x0: b.x0 - pad, y0: b.y0 - pad, x1: b.x1 + pad, y1: b.y1 + pad } };
@@ -24,6 +24,7 @@ window.FTM = window.FTM || {};
     let s = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${f(w)}${u}" height="${f(h)}${u}" viewBox="${f(b.x0)} ${f(-b.y1)} ${f(w)} ${f(h)}">\n`;
     s += `<g id="CUT" fill="none" stroke="#ff0000" stroke-width="${sw}" stroke-linejoin="round">\n`;
     for (const p of paths) {
+      if (p.layer === 'CENTER') { s += `<path data-layer="CENTER" data-piece="${p.piece}" fill="none" stroke="none" stroke-width="0" d="${p.pts.map((q, i) => (i ? 'L' : 'M') + f(q[0]) + ' ' + f(-q[1])).join(' ')}"/>\n`; continue; }
       const d = p.pts.map((q, i) => (i ? 'L' : 'M') + f(q[0]) + ' ' + f(-q[1])).join(' ') + (p.closed ? ' Z' : '');
       s += `<path data-layer="${p.layer}"${p.layer === 'OVERLAP' ? ' stroke="#ff6600"' : p.layer !== 'CUT' ? ' stroke="#0000ff"' : ''} d="${d}"/>\n`;
     }
@@ -32,7 +33,7 @@ window.FTM = window.FTM || {};
   };
 
   FTM.toDXF = function (pieces, cfg) {
-    const { paths } = collect(pieces, cfg);
+    const paths = collect(pieces, cfg).paths.filter(p => p.layer !== 'CENTER');
     const g = (code, val) => `${code}\n${val}\n`;
     const layers = [...new Set(paths.map(p => p.layer))];
     let s = g(0, 'SECTION') + g(2, 'HEADER') + g(9, '$ACADVER') + g(1, 'AC1009') + g(9, '$INSUNITS') + g(70, cfg.unit === 'mm' ? 4 : cfg.unit === 'in' ? 1 : 0) + g(0, 'ENDSEC');
@@ -48,11 +49,11 @@ window.FTM = window.FTM || {};
   };
 
   FTM.toEPS = function (pieces, cfg) {
-    const { paths, b } = collect(pieces, cfg), k = UNIT_PT[cfg.unit] || 1;
+    const { b } = collect(pieces, cfg), k = UNIT_PT[cfg.unit] || 1;
     const bb = [b.x0 * k, b.y0 * k, b.x1 * k, b.y1 * k];
     let s = `%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: ${Math.floor(bb[0])} ${Math.floor(bb[1])} ${Math.ceil(bb[2])} ${Math.ceil(bb[3])}\n%%HiResBoundingBox: ${f(bb[0])} ${f(bb[1])} ${f(bb[2])} ${f(bb[3])}\n%%Creator: Flat Tube Maker\n%%EndComments\n`;
     s += `${f(k)} ${f(k)} scale\n1 0 0 setrgbcolor ${f(cfg.unit === 'in' ? 0.004 : cfg.unit === 'mm' ? 0.1 : 0.5)} setlinewidth 1 setlinejoin\n`;
-    for (const p of paths) {
+    for (const p of collect(pieces, cfg).paths.filter(p => p.layer !== 'CENTER')) {
       s += (p.layer === 'CUT' ? '1 0 0' : p.layer === 'OVERLAP' ? '1 0.4 0' : '0 0 1') + ' setrgbcolor\nnewpath\n' + p.pts.map((q, i) => `${f(q[0])} ${f(q[1])} ${i ? 'lineto' : 'moveto'}`).join('\n') + (p.closed ? '\nclosepath' : '') + '\nstroke\n';
     }
     return s + 'showpage\n%%EOF\n';
