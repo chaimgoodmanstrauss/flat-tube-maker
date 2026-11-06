@@ -164,6 +164,7 @@
   document.querySelectorAll('[data-tmap]').forEach(b => b.addEventListener('click', () => tedit.setMap(b.dataset.tmap)));
   $('tundo').addEventListener('click', () => tedit.undo());
   $('tdove').addEventListener('click', () => tedit.setPts(FTM.teeth.DOVETAIL.map(p => p.slice())));
+  $('treset').addEventListener('click', () => tedit.reset());
   $('ton').addEventListener('change', e => { state.tooth.on = e.target.checked; scheduleB(); });
   $('t3d').addEventListener('change', e => { state.view.teeth3d = view3d.opt.teeth = e.target.checked; view3d.draw(); autosave(); });
   document.querySelectorAll('[data-fmode]').forEach(b => b.addEventListener('click', () => flat.setMode(b.dataset.fmode)));

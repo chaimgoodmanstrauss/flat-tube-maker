@@ -1,7 +1,8 @@
 // Tooth editor. Tooth coordinates (x, y): |x| <= tw/2, y >= 0, uniform scale. The master tooth (k = 0, editable) sits
 // on the + edge of a preview strip -D < y < 0; its copies run along that edge at x + k tw, and along the - edge as
 // (+-x + (k+1/2) tw, -y - D) (glide / rotate). Drag the dashed cell sides to change tw (the path's x scales with it,
-// y does not), and the lower edge of the strip to change D (preview only).
+// y does not), the dashed line at the tooth's top (outside the cell) to scale its height, and the lower edge of the
+// strip to change D (preview only). Ticks at x = +-tw/4, y = 0 mark where the neck should meet the edge.
 window.FTM = window.FTM || {};
 (function () {
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -18,12 +19,14 @@ window.FTM = window.FTM || {};
     const master = () => T().pts.map(([x, y]) => [x * T().w, y]);
     const mouse = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     const clampPt = w => [Math.max(-0.5, Math.min(0.5, w[0] / T().w)), Math.max(0, w[1])];
+    const height = () => Math.max(0, ...T().pts.map(p => p[1]));
     function hit(x, y) {
       const m = master();
       for (let i = m.length - 2; i >= 1; i--) { const s = toScr(m[i]); if (Math.hypot(s[0] - x, s[1] - y) < 11) return { v: i }; }
       const o = org();
       for (const sg of [-1, 1]) if (Math.abs(x - (o[0] + sg * T().w / 2 * view.s)) < 6) return { tw: sg };
       if (Math.abs(y - (o[1] + T().D * view.s)) < 6) return { D: 1 };
+      if (height() > 0 && Math.abs(x - o[0]) > T().w / 2 * view.s && Math.abs(y - (o[1] - height() * view.s)) < 6) return { h: 1 };
       return null;
     }
     const pushUndo = () => { undo.push(JSON.stringify(T())); if (undo.length > 100) undo.shift(); };
@@ -44,7 +47,7 @@ window.FTM = window.FTM || {};
     canvas.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
       const [x, y] = mouse(e), h = hit(x, y);
-      if (h && !h.v) { pushUndo(); drag = h; canvas.setPointerCapture(e.pointerId); return; }
+      if (h && !h.v) { pushUndo(); drag = h.h ? { h: 1, h0: height(), pts: T().pts.map(p => p.slice()) } : h; canvas.setPointerCapture(e.pointerId); return; }
       if (mode === 'delete') { if (h) del(h.v); return; }
       if (mode === 'move' && !h) return;
       pushUndo();
@@ -60,9 +63,10 @@ window.FTM = window.FTM || {};
       if (drag && drag.v) { T().pts[drag.v] = clampPt(w); onChange(); }
       else if (drag && drag.tw) { T().w = Math.max(0.02, 2 * Math.abs(w[0])); onChange(); }
       else if (drag && drag.D) { T().D = Math.max(0.02, -w[1]); onChange(); }
+      else if (drag && drag.h) { const k = Math.max(0.01, w[1]) / drag.h0; T().pts = drag.pts.map(([x, y]) => [x, y * k]); onChange(); }
       else {
         const h = hit(x, y), k = JSON.stringify(h);
-        canvas.style.cursor = h && h.tw ? 'ew-resize' : h && h.D ? 'ns-resize' : '';
+        canvas.style.cursor = h && h.tw ? 'ew-resize' : h && (h.D || h.h) ? 'ns-resize' : '';
         if (k !== JSON.stringify(hover)) { hover = h; draw(); }
       }
     });
@@ -97,7 +101,13 @@ window.FTM = window.FTM || {};
       [-1, 1].forEach(sg => { const x = o[0] + sg * tw / 2 * view.s; ctx.strokeStyle = hover && hover.tw === sg || drag && drag.tw === sg ? css('--vertex') : css('--muted'); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); });
       ctx.strokeStyle = hover && hover.D || drag && drag.D ? css('--vertex') : css('--muted');
       ctx.beginPath(); ctx.moveTo(0, o[1] + D * view.s); ctx.lineTo(W, o[1] + D * view.s); ctx.stroke();
+      const hy = o[1] - height() * view.s, xl = o[0] - tw / 2 * view.s, xr = o[0] + tw / 2 * view.s;
+      ctx.strokeStyle = hover && hover.h || drag && drag.h ? css('--vertex') : css('--muted');
+      ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(xl, hy); ctx.moveTo(xr, hy); ctx.lineTo(W, hy); ctx.stroke();
       ctx.setLineDash([]);
+      // neck marks: the tooth should leave the edge at x = +-tw/4
+      ctx.strokeStyle = css('--muted'); ctx.lineWidth = 1.5;
+      [-1, 1].forEach(sg => { const x = o[0] + sg * tw / 4 * view.s; ctx.beginPath(); ctx.moveTo(x, o[1] - 8); ctx.lineTo(x, o[1] + 8); ctx.stroke(); });
       // master tooth
       const m = master();
       line(m, false); ctx.strokeStyle = css('--poly'); ctx.lineWidth = 1.8; ctx.stroke();
@@ -111,7 +121,7 @@ window.FTM = window.FTM || {};
       const x0 = W - 12 - view.s;
       ctx.beginPath(); ctx.moveTo(x0, H - 14); ctx.lineTo(W - 12, H - 14); ctx.moveTo(x0, H - 18); ctx.lineTo(x0, H - 10); ctx.moveTo(W - 12, H - 18); ctx.lineTo(W - 12, H - 10); ctx.stroke();
       ctx.fillText('1', x0, H - 20);
-      ctx.fillText(`tooth width ${+tw.toFixed(3)}   D ${+D.toFixed(3)}`, 10, H - 12);
+      ctx.fillText(`tooth width ${+tw.toFixed(3)}   height ${+height().toFixed(3)}   D ${+D.toFixed(3)}`, 10, H - 12);
     }
 
     const api = {
@@ -119,6 +129,7 @@ window.FTM = window.FTM || {};
       setMode(m) { mode = m; document.querySelectorAll('[data-tmode]').forEach(b => b.classList.toggle('on', b.dataset.tmode === m)); },
       setMap(m) { pushUndo(); T().mode = m; onChange(); },
       setPts(p) { pushUndo(); T().pts = p; onChange(); },
+      reset() { pushUndo(); state.tooth = Object.assign(FTM.teeth.defaults(), { on: T().on }); onChange(); api.fit(); },
       undo() { const s = undo.pop(); if (s) { state.tooth = JSON.parse(s); onChange(); } },
       fit() {
         const [W, H] = size(), hy = Math.max(0.05, ...T().pts.map(p => p[1]));

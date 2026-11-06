@@ -70,7 +70,6 @@ window.FTM = window.FTM || {};
         if (pc) { sel = pc.key; op = { type: 'drag', pc, last: w }; } else { sel = null; op = { type: 'pan', last: [e.clientX, e.clientY] }; }
         draw();
       } else if (mode === 'split') {
-        api.setMode('move'); // one-shot: the next click either splits a piece or just deselects the tool
         if (!pc) return;
         const l = pc.toLocal(w), A = pc.local.A, B = pc.local.B;
         let best = -1, bd = Infinity;

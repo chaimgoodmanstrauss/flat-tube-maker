@@ -20,8 +20,9 @@ outward. Rulings are straight in space and in the flat, with t true length along
   dragging the dashed cell sides rescales the tooth horizontally only. Glide / Rotate chooses the map to the other edge:
   - + edge: tooth(x,y) -> S_i(x + k tw, w_i/2 + y)
   - - edge: tooth(x,y) -> S_i(+-x + (k+1/2) tw, -w_i/2 - y)
-  The pane shows a preview strip of depth D (drag its lower edge) with both rows of teeth filled in.
+  The pane shows a preview strip of depth D (drag its lower edge) with both rows of teeth filled in. Drag the dashed
+  line at the top of the tooth (outside the cell) to scale it vertically. Short gray ticks mark x = +-tw/4 at the edge.
 - Only whole cells inside a piece get teeth: none across the strip ends or across a split.
-- **Flat panel tools:** Move (drag a piece, `[` / `]` turn the selected piece, shift = 45 deg), Split (click a piece: cut
+- **Flat panel tools:** Move (drag a piece, `[` / `]` turn the selected piece, shift = 45 deg), Split (stays selected; each click on a piece cuts it
   across at the nearest s = multiple of tw/2, with a plain overlap flap and a mark where it ends), Reset splits, Re-stack.
 - Code: `js/teeth.js` (tooth map, piece outlines, splitting, placement), `js/toothedit.js` (tooth editor).

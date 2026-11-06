@@ -55,6 +55,7 @@
         </span>
         <button id="tundo">Undo</button>
         <button id="tdove" title="Reset to a simple dovetail">Dovetail</button>
+        <button id="treset" title="Reset tooth shape, width, depth and glide/rotate to the defaults">Reset</button>
         <span class="grp"><button data-tmap="glide" title="Teeth on the other edge: glide reflected">Glide</button><button data-tmap="rotate" title="Teeth on the other edge: rotated">Rotate</button></span>
       </div>
       <canvas id="ctooth" title="Drag the dashed lines to change the tooth width and the preview strip depth"></canvas>
@@ -94,7 +95,7 @@
       <b>3 &nbsp;Flat pieces</b>
       <span class="grp">
         <button data-fmode="move" title="Drag pieces; [ ] rotates the selected piece (shift = 45°)">Move</button>
-        <button data-fmode="split" title="Then click a piece to cut it across at that spot">Split</button>
+        <button data-fmode="split" title="Click pieces to cut them across (stays selected until Move)">Split</button>
       </span>
       <button id="resetsplit" title="Remove all splits">Reset splits</button>
       <button id="relayout" title="Stack all pieces again">Re-stack</button>

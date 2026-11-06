@@ -102,7 +102,7 @@ window.FTM = window.FTM || {};
         if (h !== hover) { hover = h; draw(); }
       }
     });
-    const end = () => { drag = -1; if (xs) { xs = null; api.setXform(null); } };
+    const end = () => { drag = -1; xs = null; };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
     canvas.addEventListener('pointerleave', () => { hover = -1; draw(); });
@@ -166,9 +166,15 @@ window.FTM = window.FTM || {};
 
     const api = {
       draw,
-      setMode(m) { mode = m; document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m)); canvas.dataset.mode = m; },
+      // a vertex mode and a transform tool exclude each other; either stays selected until another is chosen
+      setMode(m) { mode = m; api.setXform(null); },
       setNeg(h) { neg = h; },
-      setXform(m) { xform = m; document.querySelectorAll('[data-xf]').forEach(b => b.classList.toggle('on', b.dataset.xf === m)); },
+      setXform(m) {
+        xform = m;
+        document.querySelectorAll('[data-xf]').forEach(b => b.classList.toggle('on', b.dataset.xf === m));
+        document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', !m && b.dataset.mode === mode));
+        canvas.dataset.mode = m ? 'xform' : mode;
+      },
       setPolygon(np, noUndo) { if (!noUndo) pushUndo(); state.polygon = np; onChange(); api.fit(); },
       undo() { const s = undo.pop(); if (s) { state.polygon = JSON.parse(s); onChange(); } },
       fit() {
