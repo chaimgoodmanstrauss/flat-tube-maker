@@ -5,11 +5,69 @@ window.FTM = window.FTM || {};
   const UNIT_PT = { mm: 72 / 25.4, in: 72, px: 1 };
   const f = x => (+x.toFixed(4)).toString();
 
+  const CORNER = { mm: 0.2, in: 0.008, px: 0.75 }; // fillet radius in output units
+
+  // drop repeated points (and the closing duplicate of a closed path)
+  function clean(pts, closed, eps) {
+    const out = pts.filter((p, i) => !i || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) > eps);
+    while (closed && out.length > 2 && Math.hypot(out[0][0] - out[out.length - 1][0], out[0][1] - out[out.length - 1][1]) <= eps) out.pop();
+    return out;
+  }
+  // round every corner slightly: replace it by a quadratic arc of radius ~r, never using more than 45% of either side
+  function round(pts, closed, r) {
+    const n = pts.length, out = [];
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      if (!closed && (i === 0 || i === n - 1)) { out.push(p); continue; }
+      const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
+      const la = Math.hypot(p[0] - a[0], p[1] - a[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]);
+      const ua = [(p[0] - a[0]) / la, (p[1] - a[1]) / la], ub = [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb];
+      const turn = Math.acos(Math.max(-1, Math.min(1, ua[0] * ub[0] + ua[1] * ub[1])));
+      const c = Math.min(r * Math.tan(turn / 2), 0.45 * la, 0.45 * lb);
+      if (c < 1e-3 * r) { out.push(p); continue; } // effectively straight
+      const p0 = [p[0] - ua[0] * c, p[1] - ua[1] * c], p1 = [p[0] + ub[0] * c, p[1] + ub[1] * c];
+      const m = Math.max(2, Math.ceil(turn / (Math.PI / 12)));
+      for (let j = 0; j <= m; j++) {
+        const u = j / m, v = 1 - u;
+        out.push([v * v * p0[0] + 2 * u * v * p[0] + u * u * p1[0], v * v * p0[1] + 2 * u * v * p[1] + u * u * p1[1]]);
+      }
+    }
+    return out;
+  }
+  // chain open strokes of one layer that meet end to end into single paths
+  function chain(list, eps) {
+    const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= eps, out = [];
+    const left = list.map(p => p.pts.slice());
+    while (left.length) {
+      let cur = left.shift(), grown = true;
+      while (grown) {
+        grown = false;
+        for (let i = 0; i < left.length; i++) {
+          const q = left[i], h = cur[0], t = cur[cur.length - 1];
+          if (near(t, q[0])) cur = cur.concat(q.slice(1));
+          else if (near(t, q[q.length - 1])) cur = cur.concat(q.slice(0, -1).reverse());
+          else if (near(h, q[q.length - 1])) cur = q.slice(0, -1).concat(cur);
+          else if (near(h, q[0])) cur = q.slice(1).reverse().concat(cur);
+          else continue;
+          left.splice(i, 1); grown = true; break;
+        }
+      }
+      const closed = cur.length > 2 && near(cur[0], cur[cur.length - 1]);
+      out.push({ closed, pts: closed ? cur.slice(0, -1) : cur });
+    }
+    return out;
+  }
+
+  // Paths in output units: cuts (CUT outline and LABEL strokes) connected, de-duplicated and with corners rounded.
   function collect(pieces, cfg) {
-    const k = cfg.scale;
-    const paths = [];
+    const k = cfg.scale, r = (CORNER[cfg.unit] || 0.75), paths = [];
     for (const pc of pieces) {
-      for (const p of pc.paths) paths.push({ piece: pc.label, layer: p.layer, closed: p.closed, pts: p.pts.map(q => [q[0] * k, q[1] * k]) });
+      const sc = pc.paths.map(p => ({ layer: p.layer, closed: p.closed, pts: p.pts.map(q => [q[0] * k, q[1] * k]) }));
+      const bb = FTM.bbox(sc[0].pts), eps = 1e-7 * Math.max(bb.w, bb.h, 1e-9);
+      const cut = sc.filter(p => p.layer === 'CUT'), lab = chain(sc.filter(p => p.layer === 'LABEL').map(p => ({ pts: clean(p.pts, false, eps) })), eps * 10);
+      for (const p of cut) paths.push({ piece: pc.label, layer: 'CUT', closed: true, pts: round(clean(p.pts, true, eps), true, r) });
+      for (const p of lab) paths.push({ piece: pc.label, layer: 'LABEL', closed: p.closed, pts: round(clean(p.pts, p.closed, eps), p.closed, r) });
+      for (const p of sc) if (p.layer !== 'CUT' && p.layer !== 'LABEL') paths.push({ piece: pc.label, layer: p.layer, closed: p.closed, pts: p.pts });
     }
     const all = paths.filter(p => p.layer !== 'CENTER').flatMap(p => p.pts);
     const b = FTM.bbox(all.length ? all : [[0, 0]]);

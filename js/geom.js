@@ -1,4 +1,4 @@
-// Curve sampling, Bishop (rotation-minimizing) frame, tube sweep, strip unfolding, layout.
+// Curve sampling, Bishop (rotation-minimizing) frame, tube sweep, strip (s,t) coordinates in space and in the flat.
 window.FTM = window.FTM || {};
 (function () {
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -29,17 +29,14 @@ window.FTM = window.FTM || {};
   };
 
   // Double-reflection rotation-minimizing frame (Wang et al. 2008). U,V span the normal plane, T x U = V.
-  FTM.bishopFrame = function (P, T, twistRad) {
+  FTM.bishopFrame = function (P, T) {
     const n = P.length;
     const t0 = T[0];
     const ax = [Math.abs(t0[0]), Math.abs(t0[1]), Math.abs(t0[2])];
     const k = ax[0] <= ax[1] && ax[0] <= ax[2] ? 0 : ax[1] <= ax[2] ? 1 : 2;
     const e = [0, 0, 0]; e[k] = 1;
-    let u = norm(sub(e, mul(t0, dot(e, t0))));
-    let v = cross(t0, u);
-    const c = Math.cos(twistRad), s = Math.sin(twistRad);
-    u = add(mul(u, c), mul(v, s)); v = cross(t0, u);
-    const U = [u], V = [v];
+    const u = norm(sub(e, mul(t0, dot(e, t0))));
+    const U = [u], V = [cross(t0, u)];
     for (let i = 0; i < n - 1; i++) {
       const v1 = sub(P[i + 1], P[i]), c1 = dot(v1, v1);
       let r = U[i], tt = T[i];
@@ -76,34 +73,6 @@ window.FTM = window.FTM || {};
       p[0] + x * U[i][0] + y * V[i][0],
       p[1] + x * U[i][1] + y * V[i][1],
       p[2] + x * U[i][2] + y * V[i][2]]));
-  };
-
-  const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  // third vertex R of a triangle with |RP|=dP, |RQ|=dQ, on the left (side=+1) or right of P->Q
-  function place(P, Q, dP, dQ, side) {
-    const d = d2(P, Q);
-    if (d < 1e-12) return [P[0] + dP, P[1]];
-    const ux = (Q[0] - P[0]) / d, uy = (Q[1] - P[1]) / d;
-    const a = (dP * dP - dQ * dQ + d * d) / (2 * d);
-    const h = Math.sqrt(Math.max(0, dP * dP - a * a));
-    return [P[0] + a * ux - side * h * uy, P[1] + a * uy + side * h * ux];
-  }
-
-  // Unfold the ruled strip between rails a[], b[] (3D polylines) triangle by triangle.
-  // side = +1/-1 chooses the mirror so the piece is seen from outside.
-  FTM.unfoldStrip = function (a, b, side) {
-    const n = a.length;
-    const A = [[0, 0]], B = [[len(sub(b[0], a[0])), 0]];
-    let maxErr = 0;
-    for (let i = 0; i < n - 1; i++) {
-      const a1 = place(A[i], B[i], len(sub(a[i + 1], a[i])), len(sub(a[i + 1], b[i])), side);
-      const b1 = place(B[i], a1, len(sub(b[i + 1], b[i])), len(sub(b[i + 1], a[i + 1])), -side);
-      A.push(a1); B.push(b1);
-      // the other diagonal was not used for the unfolding: compare to measure non-flatness
-      const l3 = len(sub(a[i], b[i + 1]));
-      if (l3 > 1e-12) maxErr = Math.max(maxErr, Math.abs(d2(A[i], b1) - l3) / l3);
-    }
-    return { A, B, maxErr };
   };
 
   function polyArea(pts) {
@@ -187,45 +156,51 @@ window.FTM = window.FTM || {};
     return loops[0].map(p => [p[0], p[1]]);
   };
 
-  function railLength3(r) { let s = 0; for (let i = 0; i < r.length - 1; i++) s += len(sub(r[i + 1], r[i])); return s; }
-
   function cumLen(r) { const S = [0]; for (let i = 0; i < r.length - 1; i++) S.push(S[i] + len(sub(r[i + 1], r[i]))); return S; }
 
-  // Unfold one strip per polygon edge. Strips carry everything the later (joint / split / layout) stage needs.
-  // Returns [{ edge, N, A, B, SA, SB, nA, nB, seams, flatErr }] with A,B = unfolded 2D rails, S* = 3D arclengths,
-  // n* = outward unit normals of each rail in the flat.
-  FTM.buildStrips = function (poly, closed, Q, U, V) {
-    const m = poly.length;
-    const nEdges = closed ? m : m - 1;
-    const orient = polyArea(poly) >= 0 ? 1 : -1;
-    const strips = [];
-    for (let j = 0; j < nEdges; j++) {
-      const k2 = (j + 1) % m;
-      const a = Q[j], b = Q[k2];
-      const dx = poly[k2][0] - poly[j][0], dy = poly[k2][1] - poly[j][1];
-      const o2 = [orient * dy, -orient * dx]; // outward normal in the polygon plane
-      const out3 = add(mul(U[0], o2[0]), mul(V[0], o2[1]));
-      const n3 = cross(sub(b[0], a[0]), sub(a[1], a[0]));
-      const side = dot(n3, out3) >= 0 ? 1 : -1;
-      const un = FTM.unfoldStrip(a, b, side);
-      const n = a.length;
-      const m0 = [(un.A[0][0] + un.B[0][0]) / 2, (un.A[0][1] + un.B[0][1]) / 2];
-      const m1 = [(un.A[n - 1][0] + un.B[n - 1][0]) / 2, (un.A[n - 1][1] + un.B[n - 1][1]) / 2];
-      const ang = -Math.atan2(m1[1] - m0[1], m1[0] - m0[0]);
-      const c = Math.cos(ang), s = Math.sin(ang);
-      const rot = p => [c * p[0] - s * p[1], s * p[0] + c * p[1]];
-      const A = un.A.map(rot), B = un.B.map(rot);
-      strips.push({
-        edge: j, N: n - 1, A, B, SA: cumLen(a), SB: cumLen(b),
-        nA: FTM.joints.railNormals(A, B), nB: FTM.joints.railNormals(B, A),
-        flatErr: un.maxErr,
-        seams: [
-          { rail: 'A', vertex: j, mate: closed || j > 0 ? (j - 1 + nEdges) % nEdges : null },
-          { rail: 'B', vertex: k2, mate: closed || j < nEdges - 1 ? (j + 1) % nEdges : null },
-        ],
-      });
+  // Strip coordinates. s = arclength along the centre curve (shared by all strips), t = signed distance along the
+  // ruling from the midpoint of the polygon edge. poly must be counter-clockwise in (U,V); strip i runs from vertex
+  // i+1 (t = -w/2) to vertex i (t = +w/2), so S_i(s,-w_i/2) = S_(i+1)(s,+w_(i+1)/2) and n = ds x dt points outward.
+  //   space: S_i(s,t) = P(s) + (c + t e).x U(s) + (c + t e).y V(s)
+  //   flat:  F_i(s,t) = m(s) + t (cos ang(s), sin ang(s)), viewed from outside (n toward the viewer), s to the right
+  // Rulings are straight in both, and t is true length along them, so teeth (|t| > w/2) extend the rulings.
+  FTM.buildStrips = function (poly, P, T, U, V) {
+    const n = P.length, m = poly.length, S = cumLen(P), strips = [];
+    for (let i = 0; i < m; i++) {
+      const a = poly[i], b = poly[(i + 1) % m], w = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], e = [(a[0] - b[0]) / w, (a[1] - b[1]) / w];
+      const R3 = k => add(mul(U[k], e[0]), mul(V[k], e[1])), M3 = k => add(P[k], add(mul(U[k], c[0]), mul(V[k], c[1])));
+      // develop: carry the ruling (direction ang, midpoint m) from sample to sample, using the frame halfway between
+      const ang = [Math.PI / 2], mm = [[0, 0]];
+      for (let k = 0; k < n - 1; k++) {
+        const r0 = R3(k), r1 = R3(k + 1), nr = cross(T[k], r0);
+        const th = Math.atan2(dot(cross(r0, r1), nr), dot(r0, r1));
+        const d = sub(M3(k + 1), M3(k)), tm = norm(add(T[k], T[k + 1])), rm = norm(add(r0, r1));
+        const ds = dot(d, tm), dt = dot(d, rm), ph = ang[k] + th / 2;
+        mm.push([mm[k][0] + ds * Math.sin(ph) + dt * Math.cos(ph), mm[k][1] - ds * Math.cos(ph) + dt * Math.sin(ph)]);
+        ang.push(ang[k] + th);
+      }
+      strips.push({ edge: i, w, c, e, S, L: S[n - 1], ang, m: mm, P, U, V });
     }
     return strips;
+  };
+
+  function at(st, s) { // sample interval and fraction for arclength s (clamped)
+    const S = st.S; let lo = 0, hi = S.length - 1;
+    if (s <= S[0]) return [0, 0];
+    if (s >= S[hi]) return [hi - 1, 1];
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (S[mid] <= s) lo = mid; else hi = mid; }
+    return [lo, (s - S[lo]) / ((S[hi] - S[lo]) || 1)];
+  }
+  FTM.flatPt = function (st, s, t) {
+    const [k, u] = at(st, s), a = st.ang[k] + (st.ang[k + 1] - st.ang[k]) * u;
+    const m0 = st.m[k], m1 = st.m[k + 1];
+    return [m0[0] + (m1[0] - m0[0]) * u + t * Math.cos(a), m0[1] + (m1[1] - m0[1]) * u + t * Math.sin(a)];
+  };
+  FTM.spacePt = function (st, s, t) {
+    const [k, u] = at(st, s), x = st.c[0] + t * st.e[0], y = st.c[1] + t * st.e[1];
+    const p = j => add(st.P[j], add(mul(st.U[j], x), mul(st.V[j], y)));
+    return add(mul(p(k), 1 - u), mul(p(k + 1), u));
   };
 
   function bbox(pts) {

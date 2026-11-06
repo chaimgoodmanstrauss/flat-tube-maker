@@ -20,10 +20,10 @@ window.FTM = window.FTM || {};
     const d1 = o(p, q, r), d2 = o(p, q, s), d3 = o(r, s, p), d4 = o(r, s, q);
     return d1 * d2 < 0 && d3 * d4 < 0;
   }
-  FTM.selfIntersects = function (pts, closed) {
-    const n = pts.length, ne = closed ? n : n - 1;
-    for (let i = 0; i < ne; i++) for (let j = i + 2; j < ne; j++) {
-      if (closed && i === 0 && j === ne - 1) continue;
+  FTM.selfIntersects = function (pts) {
+    const n = pts.length;
+    for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
       if (segInter(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
     }
     return false;
@@ -31,13 +31,11 @@ window.FTM = window.FTM || {};
 
   FTM.PolyEditor = function (canvas, state, onChange) {
     const view = { s: 160 };     // pixels per unit; origin is always the panel centre
-    let neg = [], mode = 'add', hover = -1, drag = -1, snapOn = false, xform = null, xs = null;
+    let neg = [], mode = 'add', hover = -1, drag = -1, xform = null, xs = null;
     const undo = [];
     const poly = () => state.polygon;
     const toScr = (p, W, H) => [W / 2 + p[0] * view.s, H / 2 - p[1] * view.s];
     const toWorld = (x, y, W, H) => [(x - W / 2) / view.s, -(y - H / 2) / view.s];
-    const gridStep = () => { const raw = 24 / view.s, e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; };
-    const snap = v => snapOn ? Math.round(v / gridStep() * 2) / 2 * gridStep() : v;
 
     function size() { const r = canvas.getBoundingClientRect(); return [r.width, r.height]; }
     function mouse(e) { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
@@ -47,9 +45,9 @@ window.FTM = window.FTM || {};
       return -1;
     }
     function nearestEdge(x, y) {
-      const [W, H] = size(); const { pts, closed } = poly(); const n = pts.length;
+      const [W, H] = size(); const { pts } = poly(); const n = pts.length;
       let best = null;
-      for (let j = 0; j < (closed ? n : n - 1); j++) {
+      for (let j = 0; j < n; j++) {
         const a = toScr(pts[j], W, H), b = toScr(pts[(j + 1) % n], W, H);
         const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1;
         const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L2));
@@ -59,9 +57,8 @@ window.FTM = window.FTM || {};
       return best;
     }
     function pushUndo() { undo.push(JSON.stringify(poly())); if (undo.length > 100) undo.shift(); }
-    function minPts() { return poly().closed ? 3 : 2; }
     function remove(i) {
-      if (poly().pts.length <= minPts()) return;
+      if (poly().pts.length <= 2) return;
       pushUndo(); poly().pts.splice(i, 1); hover = -1; onChange();
     }
 
@@ -81,7 +78,7 @@ window.FTM = window.FTM || {};
       pushUndo();
       if (i >= 0) drag = i;
       else { // add
-        const w = toWorld(x, y, W, H), np = [snap(w[0]), snap(w[1])];
+        const w = toWorld(x, y, W, H), np = w;
         const ed = nearestEdge(x, y);
         if (ed) { P.pts.splice(ed.j + 1, 0, np); drag = ed.j + 1; }
         else { P.pts.push(np); drag = P.pts.length - 1; }
@@ -98,13 +95,12 @@ window.FTM = window.FTM || {};
         onChange();
       } else if (drag >= 0) {
         const w = toWorld(x, y, W, H);
-        poly().pts[drag] = [snap(w[0]), snap(w[1])];
+        poly().pts[drag] = w;
         onChange();
       } else {
         const h = hit(x, y);
         if (h !== hover) { hover = h; draw(); }
       }
-      coords(x, y, W, H);
     });
     const end = () => { drag = -1; if (xs) { xs = null; api.setXform(null); } };
     canvas.addEventListener('pointerup', end);
@@ -115,9 +111,6 @@ window.FTM = window.FTM || {};
       view.s = Math.max(8, Math.min(5000, view.s * Math.exp(-e.deltaY * 0.0015)));
       draw();
     }, { passive: false });
-
-    let coordEl = null;
-    function coords(x, y, W, H) { if (coordEl) { const w = toWorld(x, y, W, H); coordEl.textContent = `(${w[0].toFixed(2)}, ${w[1].toFixed(2)})`; } }
 
     document.addEventListener('keydown', e => {
       if (/input|textarea|select/i.test(document.activeElement.tagName)) return;
@@ -155,12 +148,12 @@ window.FTM = window.FTM || {};
       ctx.moveTo(12, H - 18); ctx.lineTo(12, H - 10); ctx.moveTo(12 + bar * view.s, H - 18); ctx.lineTo(12 + bar * view.s, H - 10); ctx.stroke();
       ctx.fillText(String(+bar.toPrecision(2)), 12, H - 22);
       // polygon: edges and vertices only
-      const { pts, closed } = poly(), n = pts.length;
-      const bad = FTM.selfIntersects(pts, closed);
+      const { pts } = poly(), n = pts.length;
+      const bad = FTM.selfIntersects(pts);
       if (n) {
         const sp = pts.map(p => toScr(p, W, H));
         ctx.beginPath(); sp.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-        if (closed) ctx.closePath();
+        ctx.closePath();
         ctx.strokeStyle = bad ? '#d33' : css('--poly'); ctx.lineWidth = 1.5; ctx.stroke();
         sp.forEach((p, i) => {
           ctx.beginPath(); ctx.arc(p[0], p[1], i === hover || i === drag ? 6 : 4, 0, 7);

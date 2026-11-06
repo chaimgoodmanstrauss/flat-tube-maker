@@ -1,5 +1,5 @@
 // Output panel: unfolded pieces in the plane. Tools: Move (drag piece / pan background), Split (click a piece to cut it
-// across at the nearest ruling, with a dovetail joint), Join (click a cut to merge again). Pieces rotate with [ and ].
+// across at the nearest s = multiple of toothwidth/2). Pieces rotate with [ and ].
 window.FTM = window.FTM || {};
 (function () {
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -18,10 +18,9 @@ window.FTM = window.FTM || {};
     return Math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1]);
   }
 
-  // cb: { split(piece, sampleIdx), join(edge, sampleIdx), changed() }
+  // cb: { split(piece, s), placed(piece) }
   FTM.FlatView = function (canvas, cb) {
     const v = { cx: 0, cy: 0, s: 10 };
-    const opt = { rulings: false, labels: false };
     let space = false;
     let pieces = [], mode = 'move', sel = null, op = null;
 
@@ -56,27 +55,6 @@ window.FTM = window.FTM || {};
           if (path.layer === 'CUT') { ctx.fillStyle = FTM.pieceColor(pc.edge, 0.88); ctx.fill(); }
           ctx.strokeStyle = path.layer === 'CUT' ? FTM.pieceColor(pc.edge, 0.3) : path.layer === 'OVERLAP' ? '#e60' : '#06f'; ctx.lineWidth = path.layer === 'OVERLAP' ? 1.8 : isSel ? 2.6 : 1.3; ctx.stroke();
         }
-        if (opt.rulings) {
-          const n = pc.rails.A.length, step = Math.max(1, Math.round((n - 1) / 70));
-          ctx.strokeStyle = FTM.pieceColor(pc.edge, 0.55); ctx.lineWidth = 0.6; ctx.beginPath();
-          for (let i = 0; i < n; i += step) {
-            const a = toScr(pc.rails.A[i], W, H), b = toScr(pc.rails.B[i], W, H);
-            ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
-          }
-          ctx.stroke();
-        }
-        if (opt.labels) {
-          const a = toScr(pc.rails.A[0], W, H), b = toScr(pc.rails.B[0], W, H);
-          ctx.fillStyle = css('--text');
-          const flat = pc.flatErr < 1e-3 ? '' : `  (flatness err ${(pc.flatErr * 100).toPrecision(2)}%)`;
-          ctx.fillText(`${pc.label}  len ${pc.length.A.toFixed(2)}/${pc.length.B.toFixed(2)}${flat}`, Math.min(a[0], b[0]), Math.min(a[1], b[1]) - 6);
-          const mid = pc.rails.A.length >> 1;
-          [['A', pc.seams[0]], ['B', pc.seams[1]]].forEach(([r, sm]) => {
-            if (sm.mate === null) return;
-            const p = toScr(pc.rails[r][mid], W, H);
-            ctx.fillStyle = css('--muted'); ctx.fillText('seam ' + (sm.vertex + 1), p[0] + (r === 'A' ? -34 : 4), p[1] + (r === 'A' ? -3 : 11));
-          });
-        }
       });
       const target = 80 / v.s, e = Math.pow(10, Math.floor(Math.log10(target))), f = target / e;
       const bar = (f < 2 ? 1 : f < 5 ? 2 : 5) * e;
@@ -96,8 +74,8 @@ window.FTM = window.FTM || {};
         if (!pc) return;
         const l = pc.toLocal(w), A = pc.local.A, B = pc.local.B;
         let best = -1, bd = Infinity;
-        for (let k = 1; k < pc.nOwn; k++) { const d = segDist(l, A[k], B[k]); if (d < bd) { bd = d; best = k; } }
-        if (best > 0) cb.split(pc, pc.i0 + best);
+        for (let k = 0; k < A.length; k++) { const d = segDist(l, A[k], B[k]); if (d < bd) { bd = d; best = k; } }
+        if (best >= 0) cb.split(pc, pc.sv[best]);
         return;
       }
       canvas.setPointerCapture(e.pointerId);
@@ -133,7 +111,7 @@ window.FTM = window.FTM || {};
     window.addEventListener('blur', () => { space = false; canvas.style.cursor = ''; });
 
     const api = {
-      draw, setPieces, fit, opt, rotateSel,
+      draw, setPieces, fit, rotateSel,
       setMode(m) { mode = m; document.querySelectorAll('[data-fmode]').forEach(b => b.classList.toggle('on', b.dataset.fmode === m)); canvas.dataset.mode = m; },
     };
     return api;

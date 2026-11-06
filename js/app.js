@@ -2,33 +2,42 @@
 (function () {
   const $ = id => document.getElementById(id);
   const DEFAULT = () => ({
-    v: 1,
-    polygon: { closed: true, pts: [0, 1, 2, 3, 4, 5].map(k => [+(0.5 * Math.cos(k * Math.PI / 3)).toFixed(3), +(0.5 * Math.sin(k * Math.PI / 3)).toFixed(3)]) },
+    v: 2,
+    polygon: { pts: [0, 1, 2, 3, 4, 5].map(k => [+(0.5 * Math.cos(k * Math.PI / 3)).toFixed(3), +(0.5 * Math.sin(k * Math.PI / 3)).toFixed(3)]) },
     curve: { x: '.25t cos t', y: '.25t sin t', z: '.25t', t0: '2', t1: '4pi', n: 300 },
     out: { scale: 1, unit: 'mm', cutLabels: true },
-    joint: FTM.joints.defaults(),
-    splits: {},
+    tooth: FTM.teeth.defaults(),
+    view: { teeth3d: false },
+    splits: {}, // edge -> [m]: cut across the strip at s = m * toothwidth / 2
     layout: {},
   });
+  // states saved before v2 had "joint" (cell x in [0,1]) and splits/layout keyed by curve sample index
+  function migrate(s) {
+    if ((s.v || 1) < 2) {
+      if (s.joint) s.tooth = Object.assign(FTM.teeth.defaults(), { on: s.joint.on !== false, pts: s.joint.pts.map(([x, y]) => [x - 0.5, y]) });
+      delete s.joint; delete s.twist; s.splits = {}; s.layout = {}; s.v = 2;
+    }
+    if (s.polygon) delete s.polygon.closed;
+    return s;
+  }
   let state = DEFAULT();
-  try { const a = localStorage.getItem('ftm.auto'); if (a) state = Object.assign(DEFAULT(), JSON.parse(a)); } catch (e) {}
-
-  if (state.twist) { const a = state.twist * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); state.polygon.pts = state.polygon.pts.map(p => [c * p[0] - s * p[1], s * p[0] + c * p[1]]); }
-  delete state.twist;
-  if (FTM.joints.OLD_DEFAULTS.includes(JSON.stringify(state.joint.pts))) state.joint.pts = FTM.joints.defaults().pts;
+  try { const a = localStorage.getItem('ftm.auto'); if (a) state = Object.assign(DEFAULT(), migrate(JSON.parse(a))); } catch (e) {}
   const view3d = FTM.View3D($('c3d'));
   let strips = [];
   const flat = FTM.FlatView($('cflat'), {
-    split(pc, c) { (state.splits[pc.edge] = state.splits[pc.edge] || []).push(c); state.layout = pruneLayout(); scheduleB(); },
+    split(pc, s) { // snap to the nearest multiple of toothwidth/2 strictly inside the piece
+      const h = state.tooth.w / 2, m = Math.round(s / h);
+      if (m * h <= pc.s0 + 1e-9 || m * h >= pc.s1 - 1e-9) return;
+      (state.splits[pc.edge] = state.splits[pc.edge] || []).push(m); scheduleB();
+    },
     placed(pc) { state.layout[pc.key] = Object.assign({}, pc.xf); autosave(); },
   });
   flat.setMode('move');
-  function pruneLayout() { return state.layout; }
   const editor = FTM.PolyEditor($('cpoly'), state, () => { schedule(); });
-  const jedit = FTM.JointEditor($('cjoint'), state, () => { scheduleB(); jedit.draw(); });
+  const tedit = FTM.ToothEditor($('ctooth'), state, () => { syncTooth(); scheduleB(); tedit.draw(); });
   let pending = false, refit = true, model = null, pieces = [];
 
-  let dirtyA = true, polyNote = '', nSamples = 0;
+  let dirtyA = true, polyNote = '';
   function schedule() { dirtyA = true; scheduleB(); }
   function scheduleB() { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; recompute(); }); } }
   function autosave() { try { localStorage.setItem('ftm.auto', JSON.stringify(snapshot())); } catch (e) {} }
@@ -45,32 +54,33 @@
     const t0 = fn.t0(0), t1 = fn.t1(0), n = Math.max(2, Math.min(3000, Math.round(+c.n) || 300));
     if (!Number.isFinite(t0) || !Number.isFinite(t1) || t0 === t1) { $('in_t1').classList.add('err'); throw new Error('bad t range'); }
     const cur = FTM.sampleCurve(fn.x, fn.y, fn.z, t0, t1, n);
-    const fr = FTM.bishopFrame(cur.P, cur.T, 0);
-    const closed = state.polygon.closed = true;
-    const drawn = state.polygon.pts, poly = closed ? FTM.resolvePolygon(drawn) : drawn;
+    const fr = FTM.bishopFrame(cur.P, cur.T);
+    const drawn = state.polygon.pts, res = FTM.resolvePolygon(drawn);
+    // counter-clockwise, no repeated vertices: then n = ds x dt is outward on every strip
+    let poly = res.filter((p, i) => { const q = res[(i + 1) % res.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-9; });
+    if (FTM.polyArea(poly) < 0) poly = poly.slice().reverse();
+    if (poly.length < 2) throw new Error('polygon needs at least two distinct vertices');
     const Q = FTM.sweep(poly, cur.P, fr.U, fr.V);
     editor.setNeg(FTM.negVolume(cur.P, fr.U, fr.V));
-    model = { P: cur.P, T: cur.T, U: fr.U, V: fr.V, Q, closed };
-    strips = FTM.buildStrips(poly, closed, Q, fr.U, fr.V);
-    nSamples = n;
-    polyNote = poly !== drawn ? ` \u2014 self-intersecting polygon: using its ${poly.length}-vertex outline` : '';
+    model = { P: cur.P, T: cur.T, U: fr.U, V: fr.V, Q };
+    strips = FTM.buildStrips(poly, cur.P, cur.T, fr.U, fr.V);
+    polyNote = res !== drawn ? `Self-intersecting polygon: using its ${poly.length}-edge outline` : '';
   }
 
   function recompute() {
     try {
       if (dirtyA) { dirtyA = false; stageA(); view3d.setModel(model); }
-      const jt = state.joint;
-      jt.w = 1; jt.margin = 0.5;
-      pieces = FTM.joints.makePieces(strips, { splits: state.splits, joint: jt, layout: state.layout, labels: state.out.cutLabels });
-      const err = Math.max(0, ...pieces.map(p => p.flatErr));
-      setStatus(polyNote ? `Self-intersecting polygon: using its ${strips.length}-edge outline` : '', false);
+      pieces = FTM.teeth.makePieces(strips, { splits: state.splits, tooth: state.tooth, layout: state.layout, labels: state.out.cutLabels });
+      const step = state.tooth.w / 24;
+      view3d.setTeeth(pieces.flatMap(pc => pc.teeth.map(t => ({ edge: pc.edge, pts: FTM.teeth.space(strips[pc.edge], t, true, step) }))));
+      setStatus(polyNote, false);
     } catch (e) {
       model = null; pieces = []; strips = []; dirtyA = true;
       view3d.setModel(null);
       setStatus(e.message, true);
     }
     flat.setPieces(pieces, refit); refit = false;
-    editor.draw(); jedit.draw();
+    editor.draw(); tedit.draw();
     autosave();
   }
 
@@ -78,9 +88,14 @@
 
   // ---- inputs ----
   const fields = ['x', 'y', 'z', 't0', 't1', 'n'];
+  function syncTooth() {
+    $('ton').checked = state.tooth.on;
+    document.querySelectorAll('[data-tmap]').forEach(b => b.classList.toggle('on', b.dataset.tmap === state.tooth.mode));
+  }
   function syncInputs() {
     fields.forEach(k => $('in_' + k).value = state.curve[k]);
-    $('jon').checked = state.joint.on;
+    syncTooth();
+    $('t3d').checked = view3d.opt.teeth = state.view.teeth3d;
     $('scale').value = state.out.scale; $('unit').value = state.out.unit; $('exlabels').checked = state.out.cutLabels;
   }
   fields.forEach(k => $('in_' + k).addEventListener('input', e => { state.curve[k] = e.target.value; refit = true; schedule(); }));
@@ -120,35 +135,37 @@
       for (let k = 0; k < 2 * n; k++) { const rad = k % 2 ? R0 * r : R0, an = Math.PI / 2 + Math.PI * k / n; pts.push([rnd(rad * Math.cos(an)), rnd(rad * Math.sin(an))]); }
     }
     refit = true;
-    editor.setPolygon({ closed: true, pts }, shapeUndo); shapeUndo = true;
+    editor.setPolygon({ pts }, shapeUndo); shapeUndo = true;
   }
   $('sh_reg').addEventListener('click', () => openShape('regular'));
   $('sh_star').addEventListener('click', () => openShape('star'));
-  $('sh_seg').addEventListener('click', () => { $('sdlg').hidden = true; refit = true; editor.setPolygon({ closed: true, pts: [[-R0, 0], [R0, 0]] }); });
+  $('sh_seg').addEventListener('click', () => { $('sdlg').hidden = true; refit = true; editor.setPolygon({ pts: [[-R0, 0], [R0, 0]] }); });
   $('sd_n').addEventListener('input', applyShape); $('sd_r').addEventListener('input', applyShape);
   $('sd_ok').addEventListener('click', () => { $('sdlg').hidden = true; });
   $('sdclose').addEventListener('click', () => { $('sdlg').hidden = true; });
   $('sdlg').addEventListener('keydown', e => { if (e.key === 'Enter') $('sdlg').hidden = true; else if (e.key === 'Escape') $('sdlg').hidden = true; });
 
-  // ---- tabs, joint, flat tools ----
+  // ---- tabs, tooth, flat tools ----
   function showTab(t) {
-    $('v_poly').hidden = t !== 'poly'; $('v_joint').hidden = t !== 'joint';
-    $('tab_poly').classList.toggle('on', t === 'poly'); $('tab_joint').classList.toggle('on', t === 'joint');
-    editor.draw(); jedit.draw();
+    $('v_poly').hidden = t !== 'poly'; $('v_tooth').hidden = t !== 'tooth';
+    $('tab_poly').classList.toggle('on', t === 'poly'); $('tab_tooth').classList.toggle('on', t === 'tooth');
+    editor.draw(); tedit.draw();
   }
   $('tab_poly').addEventListener('click', () => showTab('poly'));
-  $('tab_joint').addEventListener('click', () => { showTab('joint'); jedit.fit(); });
+  $('tab_tooth').addEventListener('click', () => { showTab('tooth'); tedit.fit(); });
   function mobileTab(m) {
     document.body.dataset.m = m;
     document.querySelectorAll('#mtabs button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
-    if (m === 'poly' || m === 'joint') { showTab(m); if (m === 'joint') jedit.fit(); }
-    requestAnimationFrame(() => { view3d.draw(); flat.draw(); editor.draw(); jedit.draw(); });
+    if (m === 'poly' || m === 'tooth') { showTab(m); if (m === 'tooth') tedit.fit(); }
+    requestAnimationFrame(() => { view3d.draw(); flat.draw(); editor.draw(); tedit.draw(); });
   }
   document.querySelectorAll('#mtabs button').forEach(b => b.addEventListener('click', () => mobileTab(b.dataset.m)));
-  document.querySelectorAll('[data-jmode]').forEach(b => b.addEventListener('click', () => jedit.setMode(b.dataset.jmode)));
-  $('jundo').addEventListener('click', () => jedit.undo());
-  $('jdove').addEventListener('click', () => jedit.setPts(FTM.joints.DOVETAIL.map(p => p.slice())));
-  $('jon').addEventListener('change', e => { state.joint.on = e.target.checked; scheduleB(); });
+  document.querySelectorAll('[data-tmode]').forEach(b => b.addEventListener('click', () => tedit.setMode(b.dataset.tmode)));
+  document.querySelectorAll('[data-tmap]').forEach(b => b.addEventListener('click', () => tedit.setMap(b.dataset.tmap)));
+  $('tundo').addEventListener('click', () => tedit.undo());
+  $('tdove').addEventListener('click', () => tedit.setPts(FTM.teeth.DOVETAIL.map(p => p.slice())));
+  $('ton').addEventListener('change', e => { state.tooth.on = e.target.checked; scheduleB(); });
+  $('t3d').addEventListener('change', e => { state.view.teeth3d = view3d.opt.teeth = e.target.checked; view3d.draw(); autosave(); });
   document.querySelectorAll('[data-fmode]').forEach(b => b.addEventListener('click', () => flat.setMode(b.dataset.fmode)));
   $('resetsplit').addEventListener('click', () => { state.splits = {}; state.layout = {}; scheduleB(); });
   $('relayout').addEventListener('click', () => { state.layout = {}; scheduleB(); });
@@ -156,9 +173,9 @@
   // ---- save / load ----
   function adopt(s) {
     Object.keys(state).forEach(k => delete state[k]);
-    Object.assign(state, DEFAULT(), s);
+    Object.assign(state, DEFAULT(), migrate(s));
     view3d.setCam(s.cam);
-    syncInputs(); refit = true; schedule(); jedit.fit();
+    syncInputs(); refit = true; schedule(); tedit.fit();
   }
   $('save').addEventListener('click', () => { try { localStorage.setItem('ftm.saved', JSON.stringify(snapshot())); setStatus('saved in this browser', false); } catch (e) { setStatus('save failed: ' + e.message, true); } });
   $('load').addEventListener('click', () => { try { const s = localStorage.getItem('ftm.saved'); if (!s) return setStatus('nothing saved yet', true); adopt(JSON.parse(s)); } catch (e) { setStatus('load failed: ' + e.message, true); } });
@@ -187,7 +204,7 @@
   });
   ex('svg', 'svg', 'image/svg+xml'); ex('dxf', 'dxf', 'application/dxf'); ex('eps', 'eps', 'application/postscript');
 
-  const redrawAll = () => { view3d.draw(); flat.draw(); editor.draw(); jedit.draw(); };
+  const redrawAll = () => { view3d.draw(); flat.draw(); editor.draw(); tedit.draw(); };
   new ResizeObserver(redrawAll).observe(document.body);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll);
 

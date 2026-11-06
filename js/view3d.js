@@ -5,8 +5,8 @@ window.FTM = window.FTM || {};
 
   FTM.View3D = function (canvas) {
     const cam = { yaw: -0.7, pitch: 0.55, zoom: 1 };
-    const opt = { tube: true }; // wireframe and frames are never drawn
-    let model = null, center = [0, 0, 0], R = 1;
+    const opt = { teeth: false };
+    let model = null, teeth = [], center = [0, 0, 0], R = 1;
 
     function setModel(m) {
       model = m;
@@ -44,19 +44,26 @@ window.FTM = window.FTM || {};
         ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
         ctx.fillStyle = c; ctx.font = '11px system-ui'; ctx.fillText(n, q[0] + 3, q[1] - 3);
       });
-      const { P, Q, closed } = model, m = Q.length, N = P.length - 1;
-      if (opt.tube && m) {
+      const { P, Q } = model, m = Q.length, N = P.length - 1;
+      if (m) {
         const S = Q.map(r => r.map(pr));
         const faces = [];
-        for (let j = 0; j < (closed ? m : m - 1); j++) {
+        for (let j = 0; j < m; j++) {
           const a = S[j], b = S[(j + 1) % m];
           for (let i = 0; i < N; i++) {
             const p0 = a[i], p1 = b[i], p2 = b[i + 1], p3 = a[i + 1];
             faces.push([p0, p1, p2, p3, j, (p0[2] + p1[2] + p2[2] + p3[2]) / 4]);
           }
         }
-        faces.sort((x, y) => y[5] - x[5]);
+        // teeth: one flat polygon each, in the extension of its own strip's surface
+        if (opt.teeth) for (const t of teeth) { const q = t.pts.map(pr); faces.push({ q, j: t.edge, z: q.reduce((s, p) => s + p[2], 0) / q.length }); }
+        faces.sort((x, y) => (y.z === undefined ? y[5] : y.z) - (x.z === undefined ? x[5] : x.z));
         for (const f of faces) {
+          if (f.q) {
+            ctx.beginPath(); f.q.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+            ctx.fillStyle = FTM.pieceColor(f.j, 0.72); ctx.fill(); ctx.strokeStyle = FTM.pieceColor(f.j, 0.35); ctx.lineWidth = 0.8; ctx.stroke();
+            continue;
+          }
           const [p0, p1, p2, p3] = f;
           // view-space normal's component toward the viewer approximated from screen-space winding area
           const ar = Math.abs((p2[0] - p0[0]) * (p3[1] - p1[1]) - (p2[1] - p0[1]) * (p3[0] - p1[0])) / 2;
@@ -91,7 +98,7 @@ window.FTM = window.FTM || {};
 
     return {
       draw, setModel, opt,
-      reset() { cam.yaw = -0.7; cam.pitch = 0.55; cam.zoom = 1; draw(); },
+      setTeeth(t) { teeth = t; draw(); },
       getCam: () => ({ ...cam }), setCam(c) { if (c) Object.assign(cam, c); },
     };
   };

@@ -18,13 +18,13 @@
   <button id="reset">Reset</button>
 </header>
 <nav id="mtabs">
-  <button data-m="poly" class="on">Section</button><button data-m="joint">Joint</button><button data-m="3d">3D</button><button data-m="flat">Flat</button>
+  <button data-m="poly" class="on">Section</button><button data-m="tooth">Tooth</button><button data-m="3d">3D</button><button data-m="flat">Flat</button>
 </nav>
 <main>
   <section id="p1">
     <div class="tabs">
       <button id="tab_poly" class="on">1 &nbsp;Cross-section</button>
-      <button id="tab_joint">Joint</button>
+      <button id="tab_tooth">Tooth</button>
     </div>
     <div id="v_poly" class="view rel">
       <div class="bar">
@@ -46,17 +46,18 @@
       </div>
       <div class="foot"><span id="polywarn" class="bad"></span></div>
     </div>
-    <div id="v_joint" class="view" hidden>
+    <div id="v_tooth" class="view" hidden>
       <div class="bar">
         <span class="grp">
-          <button data-jmode="add" title="Add vertex (A)">Add</button>
-          <button data-jmode="move" title="Move vertex (M)">Move</button>
-          <button data-jmode="delete" title="Delete vertex (D, or right-click)">Delete</button>
+          <button data-tmode="add" title="Add vertex (A)">Add</button>
+          <button data-tmode="move" title="Move vertex (M)">Move</button>
+          <button data-tmode="delete" title="Delete vertex (D, or right-click)">Delete</button>
         </span>
-        <button id="jundo">Undo</button>
-        <button id="jdove" title="Reset to a simple dovetail above the edge">Dovetail</button>
+        <button id="tundo">Undo</button>
+        <button id="tdove" title="Reset to a simple dovetail">Dovetail</button>
+        <span class="grp"><button data-tmap="glide" title="Teeth on the other edge: glide reflected">Glide</button><button data-tmap="rotate" title="Teeth on the other edge: rotated">Rotate</button></span>
       </div>
-      <canvas id="cjoint"></canvas>
+      <canvas id="ctooth" title="Drag the dashed lines to change the tooth width and the preview strip depth"></canvas>
     </div>
   </section>
 
@@ -64,6 +65,7 @@
     <div class="bar">
       <b>2 &nbsp;Curve &amp; tube</b>
       <button id="formula" title="Edit x(t), y(t), z(t)">Formula</button>
+      <label><input type="checkbox" id="t3d"> teeth</label>
       <span class="presets">
         <button data-preset=".25t cos t|.25t sin t|.25t|2|4pi">spiral</button>
       <button data-preset="(2+cos 3t) cos 2t|(2+cos 3t) sin 2t|sin 3t|0|2pi">knot</button>
@@ -96,7 +98,7 @@
       </span>
       <button id="resetsplit" title="Remove all splits">Reset splits</button>
       <button id="relayout" title="Stack all pieces again">Re-stack</button>
-      <label><input type="checkbox" id="jon" checked> joints</label>
+      <label><input type="checkbox" id="ton" checked> teeth</label>
       <span class="sp"></span>
       <label>scale <input id="scale" type="number" step="any" value="1" style="width:5em"></label>
       <select id="unit"><option>mm</option><option>in</option><option>px</option></select>
@@ -116,8 +118,8 @@
 <script src="js/flatview.js"></script>
 <script src="js/export.js"></script>
 <script src="js/label.js"></script>
-<script src="js/joints.js"></script>
-<script src="js/jointedit.js"></script>
+<script src="js/teeth.js"></script>
+<script src="js/toothedit.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
