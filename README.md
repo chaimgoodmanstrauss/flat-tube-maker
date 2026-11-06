@@ -17,7 +17,7 @@ outward. Rulings are straight in space and in the flat, with t true length along
 
 ## Teeth, splitting, rearranging
 - **Tooth tab** (left panel): tooth (x, y), |x| <= tw/2, y >= 0; x is stored as a fraction of the tooth width tw, so
-  dragging the dashed cell sides rescales the tooth horizontally only. Glide / Rotate chooses the map to the other edge:
+  dragging the dashed cell sides rescales the tooth horizontally only. The glide / rotate radio buttons choose the map to the other edge:
   - + edge: tooth(x,y) -> S_i(x + k tw, w_i/2 + y)
   - - edge: tooth(x,y) -> S_i(+-x + (k+1/2) tw, -w_i/2 - y)
   The pane shows a preview strip of depth D (drag its lower edge) with both rows of teeth filled in. Drag the dashed

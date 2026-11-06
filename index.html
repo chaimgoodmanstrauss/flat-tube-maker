@@ -56,9 +56,12 @@
         <button id="tundo">Undo</button>
         <button id="tdove" title="Reset to a simple dovetail">Dovetail</button>
         <button id="treset" title="Reset tooth shape, width, depth and glide/rotate to the defaults">Reset</button>
-        <span class="grp"><button data-tmap="glide" title="Teeth on the other edge: glide reflected">Glide</button><button data-tmap="rotate" title="Teeth on the other edge: rotated">Rotate</button></span>
       </div>
       <canvas id="ctooth" title="Drag the dashed lines to change the tooth width and the preview strip depth"></canvas>
+      <div class="foot">
+        <label title="Teeth on the other edge: glide reflected"><input type="radio" name="tmap" value="glide"> glide</label>
+        <label title="Teeth on the other edge: rotated"><input type="radio" name="tmap" value="rotate"> rotate</label>
+      </div>
     </div>
   </section>
 

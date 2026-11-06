@@ -90,7 +90,7 @@
   const fields = ['x', 'y', 'z', 't0', 't1', 'n'];
   function syncTooth() {
     $('ton').checked = state.tooth.on;
-    document.querySelectorAll('[data-tmap]').forEach(b => b.classList.toggle('on', b.dataset.tmap === state.tooth.mode));
+    document.querySelectorAll('input[name=tmap]').forEach(r => { r.checked = r.value === state.tooth.mode; });
   }
   function syncInputs() {
     fields.forEach(k => $('in_' + k).value = state.curve[k]);
@@ -161,7 +161,7 @@
   }
   document.querySelectorAll('#mtabs button').forEach(b => b.addEventListener('click', () => mobileTab(b.dataset.m)));
   document.querySelectorAll('[data-tmode]').forEach(b => b.addEventListener('click', () => tedit.setMode(b.dataset.tmode)));
-  document.querySelectorAll('[data-tmap]').forEach(b => b.addEventListener('click', () => tedit.setMap(b.dataset.tmap)));
+  document.querySelectorAll('input[name=tmap]').forEach(r => r.addEventListener('change', () => { if (r.checked) tedit.setMap(r.value); }));
   $('tundo').addEventListener('click', () => tedit.undo());
   $('tdove').addEventListener('click', () => tedit.setPts(FTM.teeth.DOVETAIL.map(p => p.slice())));
   $('treset').addEventListener('click', () => tedit.reset());

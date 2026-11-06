@@ -21,6 +21,7 @@ section { display: flex; flex-direction: column; min-width: 0; min-height: 0; ba
 .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 5px 8px; border-bottom: 1px solid var(--line); }
 .foot { padding: 3px 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; display: flex; gap: 10px; }
 .foot .hint { margin-left: auto; }
+.foot input[type=radio] { margin: 0; }
 canvas { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
 #cpoly[data-mode=add] { cursor: crosshair; } #cpoly[data-mode=move] { cursor: grab; } #cpoly[data-mode=delete] { cursor: not-allowed; } #cpoly[data-mode=xform] { cursor: crosshair; }
 #c3d { cursor: grab; } #cflat { cursor: move; }
