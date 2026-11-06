@@ -140,13 +140,10 @@ window.FTM = window.FTM || {};
       }
       // origin
       ctx.fillStyle = css('--axis'); ctx.beginPath(); ctx.arc(ox, oy, 4, 0, 7); ctx.fill();
-      // unit scale bar (1, 2, 5 x 10^k units)
-      const raw = 80 / view.s, e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e;
-      const bar = (f < 2 ? 1 : f < 5 ? 2 : 5) * e;
-      ctx.strokeStyle = css('--axis'); ctx.fillStyle = css('--axis'); ctx.lineWidth = 1.5; ctx.font = '11px system-ui';
-      ctx.beginPath(); ctx.moveTo(12, H - 14); ctx.lineTo(12 + bar * view.s, H - 14);
-      ctx.moveTo(12, H - 18); ctx.lineTo(12, H - 10); ctx.moveTo(12 + bar * view.s, H - 18); ctx.lineTo(12 + bar * view.s, H - 10); ctx.stroke();
-      ctx.fillText(String(+bar.toPrecision(2)), 12, H - 22);
+      // unit length bar, unlabelled
+      ctx.strokeStyle = css('--axis'); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(12, H - 14); ctx.lineTo(12 + view.s, H - 14);
+      ctx.moveTo(12, H - 18); ctx.lineTo(12, H - 10); ctx.moveTo(12 + view.s, H - 18); ctx.lineTo(12 + view.s, H - 10); ctx.stroke();
       // polygon: edges and vertices only
       const { pts } = poly(), n = pts.length;
       const bad = FTM.selfIntersects(pts);
