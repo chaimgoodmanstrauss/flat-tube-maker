@@ -116,12 +116,11 @@ window.FTM = window.FTM || {};
         ctx.beginPath(); ctx.arc(s[0], s[1], end ? 3 : on ? 6 : 4, 0, 7);
         ctx.fillStyle = end ? css('--axis') : css('--vertex'); ctx.fill();
       });
-      // unit length and current values
+      // unit length
       ctx.font = '11px system-ui'; ctx.strokeStyle = ctx.fillStyle = css('--axis'); ctx.lineWidth = 1.5;
       const x0 = W - 12 - view.s;
       ctx.beginPath(); ctx.moveTo(x0, H - 14); ctx.lineTo(W - 12, H - 14); ctx.moveTo(x0, H - 18); ctx.lineTo(x0, H - 10); ctx.moveTo(W - 12, H - 18); ctx.lineTo(W - 12, H - 10); ctx.stroke();
       ctx.fillText('1', x0, H - 20);
-      ctx.fillText(`tooth width ${+tw.toFixed(3)}   height ${+height().toFixed(3)}   D ${+D.toFixed(3)}`, 10, H - 12);
     }
 
     const api = {
