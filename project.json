@@ -2,7 +2,7 @@
   "name": "Flat Tube Maker",
   "cat": "Geometry",
   "icon": "rings",
-  "desc": "Sweep a polygon along a 3D curve (Bishop frame) and unfold the tube into flat pieces.",
+  "desc": "Make your choice of twisty tube out of flat pieces.",
   "path": "flat-tube-maker/",
   "live": true,
   "img": "icons/tube.jpg"
